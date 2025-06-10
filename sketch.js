@@ -17,11 +17,11 @@ let currentBoss = null;
 
 // Talent System
 const allTalents = [
-    { id: 'hp_boost', name: "+2 Max Health", description: "Increases max health by 2.", apply: (p) => { p.maxHealth += 2; p.health += 2; } },
-    { id: 'speed_boost', name: "+0.5 Speed", description: "Increases movement speed.", apply: (p) => { p.speed += 0.5; } },
-    { id: 'firerate_boost', name: "-20% Fire Rate", description: "Increases firing speed (reduces delay).", apply: (p) => { p.fireRate *= 0.8; } },
-    { id: 'damage_boost', name: "+1 Proj. Damage", description: "Your projectiles deal more damage.", apply: (p) => { p.projectileDamage += 1; } },
-    { id: 'dash_cooldown', name: "-20% Dash CD", description: "Reduces dash cooldown.", apply: (p) => { p.dashCooldown *= 0.8; } }
+    { id: 'hp_boost', name: "+2 最大生命值", description: "最大生命值增加2.", apply: (p) => { p.maxHealth += 2; p.health += 2; } },
+    { id: 'speed_boost', name: "+0.5 速度", description: "提高移动速度.", apply: (p) => { p.speed += 0.5; } },
+    { id: 'firerate_boost', name: "-20% 射速", description: "提高射击速度（减少延迟）.", apply: (p) => { p.fireRate *= 0.8; } },
+    { id: 'damage_boost', name: "+1 子弹伤害", description: "你的子弹造成更多伤害.", apply: (p) => { p.projectileDamage += 1; } },
+    { id: 'dash_cooldown', name: "-20% 冲刺冷却", description: "减少冲刺冷却时间.", apply: (p) => { p.dashCooldown *= 0.8; } }
 ];
 let offeredTalents = [];
 let talentButtonHeight = 50;
@@ -88,9 +88,9 @@ function drawStartScreen() {
     textAlign(CENTER, CENTER);
     textSize(48);
     fill(0);
-    text("Roguelike Shooter", width / 2, height / 3);
+    text("肉鸽射击", width / 2, height / 3);
     textSize(24);
-    text("Click to Start", width / 2, height / 2);
+    text("点击开始", width / 2, height / 2);
 }
 
 function runGame() {
@@ -162,18 +162,18 @@ function runGame() {
 
     // HUD Display
     fill(0); textSize(16); textAlign(LEFT, TOP);
-    text("Health: " + player.health + "/" + player.maxHealth, 10, 10);
-    text("Level: " + player.level, 10, 30);
+    text("生命值: " + player.health + "/" + player.maxHealth, 10, 10);
+    text("等级: " + player.level, 10, 30);
     let xpBarWidth = 100;
     fill(150); rect(10, 50, xpBarWidth, 10);
     fill(0,255,0); rect(10, 50, constrain(map(player.xp, 0, player.xpToNextLevel, 0, xpBarWidth),0,xpBarWidth), 10);
-    text("XP: " + player.xp + "/" + player.xpToNextLevel, 10 + xpBarWidth + 5, 50 + 5);
+    text("经验值: " + player.xp + "/" + player.xpToNextLevel, 10 + xpBarWidth + 5, 50 + 5);
 
     if (!isBossBattleActive) {
-        text("Wave: " + currentWave, width - 150, 10);
-        text("Enemies: " + (enemiesPerWave - enemiesDefeatedThisWave), width - 150, 30);
+        text("波次: " + currentWave, width - 150, 10);
+        text("敌人: " + (enemiesPerWave - enemiesDefeatedThisWave), width - 150, 30);
     } else if (currentBoss) {
-        text("BOSS BATTLE!", width - 150, 10);
+        text("BOSS 战！", width - 150, 10);
     }
 
     // Check for game over state from player health
@@ -197,7 +197,7 @@ function drawTalentSelectionScreen() {
     textAlign(CENTER, CENTER);
     textSize(32);
     fill(0);
-    text("Level Up! Choose a Talent:", width / 2, height / 4);
+    text("升级！选择一个天赋：", width / 2, height / 4);
 
     for (let i = 0; i < offeredTalents.length; i++) {
         let talent = offeredTalents[i];
@@ -223,18 +223,18 @@ function drawGameOverScreen() {
     textAlign(CENTER, CENTER);
     textSize(48);
     fill(255, 0, 0);
-    text("GAME OVER", width / 2, height / 3);
+    text("游戏结束", width / 2, height / 3);
     textSize(24);
     fill(0);
-    let message = "You reached ";
+    let message = "你到达了 ";
     if (isBossBattleActive || currentWave >= BOSS_APPEARS_WAVE) { // Adjusted logic slightly
-        message += "the Boss on Wave " + (BOSS_APPEARS_WAVE -1) +"!";
+        message += "Boss 波次 " + (BOSS_APPEARS_WAVE -1) +"!";
     } else {
-        message += "Wave " + currentWave +".";
+        message += "波次 " + currentWave +".";
     }
     text(message, width/2, height/2);
-    text("Final Level: " + player.level, width/2, height/2 + 30);
-    text("Click to Restart", width / 2, height / 2 + 70);
+    text("最终等级: " + player.level, width/2, height/2 + 30);
+    text("点击重新开始", width / 2, height / 2 + 70);
 }
 
 function mousePressed() {
