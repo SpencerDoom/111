@@ -1,6 +1,7 @@
 let player;
 let enemies = [];
 let powerUps = [];
+let waveManager;
 const ENEMY_SPAWN_INTERVAL = 2000;
 let lastEnemySpawnTime = 0;
 let gameState = 'start'; // 'start', 'playing', 'gameOver', 'talentSelection', 'shop'
@@ -363,6 +364,7 @@ function updateScreenShake() {
 function setup() {
     createCanvas(800, 600);
     player = new Player(width / 2, height / 2); // Player must be created before resetGame
+    waveManager = new WaveManager(); // Initialize wave manager
     resetGame();
     
     // Initialize audio after user interaction (will be called on first click)
@@ -415,6 +417,13 @@ function resetGame() {
 
     enemies = [];
     powerUps = [];         // Clear power-ups on reset
+    
+    // Reset wave manager
+    if (waveManager) {
+        waveManager.reset();
+    }
+    
+    // Keep these for compatibility with existing boss system
     currentWave = 1;
     enemiesPerWave = 5;
     enemiesSpawnedThisWave = 0;
@@ -588,10 +597,15 @@ function runGame() {
         // Player can move towards portal
     }
     else { // Regular wave logic (No boss, no portal)
-        // Enemy Spawning Logic
-        if (enemiesSpawnedThisWave < enemiesPerWave && millis() - lastEnemySpawnTime > ENEMY_SPAWN_INTERVAL) {
-            spawnEnemy();
-        }
+        // Update wave manager
+        waveManager.update();
+        
+        // Sync global variables with wave manager for compatibility
+        let waveInfo = waveManager.getWaveInfo();
+        currentWave = waveInfo.current;
+        enemiesPerWave = waveInfo.enemiesPerWave;
+        enemiesSpawnedThisWave = waveInfo.enemiesSpawned;
+        enemiesDefeatedThisWave = waveInfo.enemiesDefeated;
 
         // Update and display regular enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
@@ -604,37 +618,27 @@ function runGame() {
                 enemies[i].health = 0; // Enemy destroyed on collision
             }
 
-            // Enemy defeat gold handled in Enemy.takeDamage
+            // Enemy defeat handling
             if (enemies[i].health <= 0) {
-                // player.gainXP(enemies[i].xpValue); // XP gain is now in Enemy.takeDamage
                 enemies.splice(i, 1);
-                enemiesDefeatedThisWave++;
+                waveManager.onEnemyDefeated(); // Notify wave manager
             }
         }
 
         // Wave Transition Logic / Boss Trigger
-        if (enemiesSpawnedThisWave >= enemiesPerWave && enemiesDefeatedThisWave >= enemiesPerWave && enemies.length === 0) {
-            if ((currentWave % BOSS_APPEARS_WAVE) === 0) { // Boss every 3 waves
-                isBossBattleActive = true;
-                enemiesSpawnedThisWave = 0;
-                enemiesDefeatedThisWave = 0;
-                
-                // Choose random boss variant
-                let bossVariants = ['standard', 'sweeper', 'summoner', 'beamer'];
-                let chosenVariant = random(bossVariants);
-                currentBoss = new Boss(width / 2, 120, chosenVariant);
-                console.log("BOSS INCOMING! Type: " + chosenVariant);
-                enemies = [];
-            } else {
-                currentWave++;
-                enemiesPerWave += 2;
-                enemiesSpawnedThisWave = 0;
-                enemiesDefeatedThisWave = 0;
-                lastEnemySpawnTime = millis();
-                console.log("Starting Wave: " + currentWave);
-                 // Potentially offer talents between normal waves too if desired
-                // player.levelUp(); // For testing talent screen
-            }
+        if (waveManager.shouldStartBossBattle()) {
+            isBossBattleActive = true;
+            waveManager.reset(); // Reset for next cycle
+            
+            // Choose random boss variant
+            let bossVariants = ['standard', 'sweeper', 'summoner', 'beamer'];
+            let chosenVariant = random(bossVariants);
+            currentBoss = new Boss(width / 2, 120, chosenVariant);
+            console.log("BOSS INCOMING! Type: " + chosenVariant);
+            enemies = [];
+        } else if (waveManager.shouldAdvanceWave()) {
+            waveManager.advanceWave();
+            console.log("Wave advanced by WaveManager");
         }
     }
 
@@ -1494,70 +1498,119 @@ class Projectile {
     }
 }
 
+// Base Enemy class with common functionality
 class Enemy {
-    constructor(x, y, wave = 1) {
+    constructor(x, y, wave = 1, variant = 'basic') {
         this.x = x;
         this.y = y;
+        this.wave = wave;
+        this.variant = variant;
         this.size = random(20, 35);
+        
+        // Base stats with wave scaling
+        this.baseSpeed = random(0.5, 1.2);
+        this.speed = this.baseSpeed + (wave-1) * 0.05;
+        this.health = floor(random(2, 4)) + floor((wave-1) * 0.5);
+        this.maxHealth = this.health;
+        this.xpValue = 5 + (wave-1);
+        this.goldValue = floor(random(1, 3)) + floor(wave / 2);
 
-        this.speed = random(0.5, 1.2) + (wave-1) * 0.05; // Slight increase per wave
-        this.health = floor(random(2, 4)) + floor((wave-1) * 0.5); // Slight increase per wave
-        this.xpValue = 5 + (wave-1); // More XP for later wave enemies
-        this.goldValue = floor(random(1, 3)) + floor(wave / 2); // e.g. 1-2 base, +1 every 2 waves
-
-        this.attackCooldown = 2500 - (wave-1)*50; // Attack slightly faster in later waves
+        // Attack properties
+        this.attackCooldown = 2500 - (wave-1)*50;
         if (this.attackCooldown < 1000) this.attackCooldown = 1000;
-        this.lastAttackTime = millis() + random(-500, 500); // Stagger initial attacks
+        this.lastAttackTime = millis() + random(-500, 500);
         this.projectileDamage = 1 + floor((wave-1)*0.2);
-
         this.projectiles = [];
 
+        // Movement pattern data
+        this.spawnTime = millis();
+        this.movementOffset = random(0, TWO_PI);
+        this.zigzagAmplitude = random(30, 60);
+        this.zigzagFrequency = random(0.02, 0.05);
+
+        // Visual properties
+        this.color = this.getVariantColor();
+        this.hitFlashTime = 0;
+    }
+
+    // Abstract methods to be overridden by subclasses
+    getEmoji() { return "👹"; }
+    getVariantColor() { 
         let r = map(this.health, 2, 6, 100, 200);
         let g = map(this.speed, 0.5, 2, 200, 50);
         let b = map(this.size, 20, 35, 50, 150);
-        this.color = color(r, g, b, 220);
+        return color(r, g, b, 220);
+    }
+    getMovementPattern() { return 'targeted'; }
+    canShoot() { return true; }
+
+    update(player) {
+        this.move(player);
+        this.handleShooting(player);
+        this.updateProjectiles(player);
+    }
+
+    move(player) {
+        let pattern = this.getMovementPattern();
+        
+        switch(pattern) {
+            case 'straight':
+                this.y += this.speed;
+                break;
+                
+            case 'zigzag':
+                this.y += this.speed * 0.7;
+                this.x += sin((millis() - this.spawnTime) * this.zigzagFrequency + this.movementOffset) * this.zigzagAmplitude * 0.02;
+                break;
+                
+            case 'targeted':
+            default:
+                let angle = atan2(player.y - this.y, player.x - this.x);
+                this.x += cos(angle) * this.speed;
+                this.y += sin(angle) * this.speed;
+                break;
+        }
+    }
+
+    handleShooting(player) {
+        if (this.canShoot() && millis() - this.lastAttackTime > this.attackCooldown) {
+            this.shootAttack(player);
+            this.lastAttackTime = millis();
+        }
     }
 
     shootAttack(player) {
         let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
-        // type 'enemy', damage, color, speed, size
         this.projectiles.push(new Projectile(this.x, this.y, angleToPlayer, 'enemy', this.projectileDamage, color(255,200,0), 3, 8));
     }
 
-    update(player) {
-        this.moveTowardsPlayer(player);
-
-        if (millis() - this.lastAttackTime > this.attackCooldown) {
-            this.shootAttack(player);
-            this.lastAttackTime = millis();
-        }
-
-        // Enemy Projectile Logic
+    updateProjectiles(player) {
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             let p = this.projectiles[i];
             p.update();
             p.display();
+            
             if (dist(player.x, player.y, p.x, p.y) < player.size / 2 + p.size / 2) {
                 player.takeDamage(p.damage);
                 this.projectiles.splice(i, 1);
-                // No direct game over check here, runGame loop handles it
             } else if (p.isOffScreen()) {
                 this.projectiles.splice(i, 1);
             }
         }
     }
 
-    moveTowardsPlayer(player) {
-        let angle = atan2(player.y - this.y, player.x - this.x);
-        this.x += cos(angle) * this.speed;
-        this.y += sin(angle) * this.speed;
-    }
     display() {
         push();
         translate(this.x + screenShake.x, this.y + screenShake.y);
         
+        // Hit flash effect
+        let currentColor = this.color;
+        if (millis() < this.hitFlashTime) {
+            currentColor = color(255, 100, 100);
+        }
+        
         // Enemy body
-        fill(this.color);
+        fill(currentColor);
         stroke(0);
         strokeWeight(2);
         ellipse(0, 0, this.size, this.size);
@@ -1567,38 +1620,320 @@ class Enemy {
         noStroke();
         textAlign(CENTER, CENTER);
         textSize(this.size * 0.6);
-        text("👹", 0, 0);
+        text(this.getEmoji(), 0, 0);
         
         pop();
     }
-    takeDamage(amount) { // Called by player projectiles
+
+    takeDamage(amount) {
         this.health -= amount;
+        this.hitFlashTime = millis() + 200;
         
         // Hit effects
         createExplosion(this.x, this.y, [255, 150, 50], 4);
         
         if (this.health <= 0) {
-            let xpGain = ceil(this.xpValue * (player.xpMultiplier || 1));
-            let goldGain = ceil(this.goldValue * (player.goldMultiplier || 1));
-            
-            player.gainXP(xpGain); // Grant XP from here  
-            player.gold += goldGain;
-            console.log("Enemy defeated. XP: +" + xpGain + ", Gold: +" + goldGain + ", Total gold: " + player.gold);
-            
-            // Power-up drop chance
-            if (random() < POWER_UP_DROP_CHANCE) {
-                let powerUpType = random(POWER_UP_TYPES);
-                powerUps.push(new PowerUp(this.x, this.y, powerUpType));
-                console.log("Power-up dropped: " + powerUpType);
-            }
-            
-            // Death explosion
-            createExplosion(this.x, this.y, [255, 100, 50], 12);
-            playSound('explosion');
-            addScreenShake(3, 8);
-            
-            // The enemy object will be spliced from enemies array in runGame loop
+            this.onDeath();
         }
+    }
+
+    onDeath() {
+        let xpGain = ceil(this.xpValue * (player.xpMultiplier || 1));
+        let goldGain = ceil(this.goldValue * (player.goldMultiplier || 1));
+        
+        player.gainXP(xpGain);
+        player.gold += goldGain;
+        console.log(`${this.variant} enemy defeated. XP: +${xpGain}, Gold: +${goldGain}`);
+        
+        // Power-up drop chance
+        if (random() < POWER_UP_DROP_CHANCE) {
+            let powerUpType = random(POWER_UP_TYPES);
+            powerUps.push(new PowerUp(this.x, this.y, powerUpType));
+            console.log("Power-up dropped: " + powerUpType);
+        }
+        
+        // Death explosion and effects
+        createExplosion(this.x, this.y, [255, 100, 50], 12);
+        playSound('explosion');
+        addScreenShake(3, 8);
+        
+        // Clear this enemy's projectiles for performance
+        this.projectiles = [];
+    }
+
+    // Check if enemy is off-screen (for cleanup)
+    isOffScreen() {
+        return (this.x < -this.size || this.x > width + this.size || this.y > height + this.size);
+    }
+}
+
+// Concrete enemy variants
+class GruntEnemy extends Enemy {
+    constructor(x, y, wave = 1) {
+        super(x, y, wave, 'grunt');
+        this.size = random(18, 28);
+        this.speed *= 0.8; // Slower
+        this.health = floor(this.health * 1.2); // More health
+    }
+    
+    getEmoji() { return "👾"; }
+    getVariantColor() { return color(150, 100, 200, 220); }
+    getMovementPattern() { return 'straight'; }
+    canShoot() { return false; } // Melee only
+}
+
+class AlienEnemy extends Enemy {
+    constructor(x, y, wave = 1) {
+        super(x, y, wave, 'alien');
+        this.size = random(20, 30);
+        this.attackCooldown *= 0.7; // Shoots faster
+    }
+    
+    getEmoji() { return "👽"; }
+    getVariantColor() { return color(100, 255, 150, 220); }
+    getMovementPattern() { return 'zigzag'; }
+    canShoot() { return true; }
+}
+
+class SaucerEnemy extends Enemy {
+    constructor(x, y, wave = 1) {
+        super(x, y, wave, 'saucer');
+        this.size = random(25, 40);
+        this.speed *= 1.3; // Faster
+        this.health = max(1, floor(this.health * 0.7)); // Less health but fast
+    }
+    
+    getEmoji() { return "🛸"; }
+    getVariantColor() { return color(255, 255, 100, 220); }
+    getMovementPattern() { return 'targeted'; }
+    canShoot() { return true; }
+    
+    shootAttack(player) {
+        // Shoots 3 projectiles in a spread
+        let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
+        for (let i = -1; i <= 1; i++) {
+            let spreadAngle = angleToPlayer + i * 0.3;
+            this.projectiles.push(new Projectile(this.x, this.y, spreadAngle, 'enemy', this.projectileDamage, color(255, 255, 0), 4, 6));
+        }
+    }
+}
+
+class SkullEnemy extends Enemy {
+    constructor(x, y, wave = 1) {
+        super(x, y, wave, 'skull');
+        this.size = random(22, 35);
+        this.health = floor(this.health * 1.5); // Tankier
+        this.speed *= 0.6; // Slower
+        this.projectileDamage += 1; // More damage
+    }
+    
+    getEmoji() { return "💀"; }
+    getVariantColor() { return color(200, 50, 50, 220); }
+    getMovementPattern() { return 'targeted'; }
+    canShoot() { return true; }
+    
+    shootAttack(player) {
+        // Shoots a larger, more dangerous projectile
+        let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
+        this.projectiles.push(new Projectile(this.x, this.y, angleToPlayer, 'enemy', this.projectileDamage, color(255, 50, 50), 2.5, 12));
+    }
+}
+
+class RobotEnemy extends Enemy {
+    constructor(x, y, wave = 1) {
+        super(x, y, wave, 'robot');
+        this.size = random(24, 36);
+        this.attackCooldown *= 1.5; // Shoots slower but...
+        this.burstCount = 3; // Shoots in bursts
+        this.burstDelay = 200;
+        this.currentBurst = 0;
+        this.lastBurstTime = 0;
+    }
+    
+    getEmoji() { return "🤖"; }
+    getVariantColor() { return color(100, 150, 255, 220); }
+    getMovementPattern() { return 'zigzag'; }
+    canShoot() { return true; }
+    
+    handleShooting(player) {
+        if (millis() - this.lastAttackTime > this.attackCooldown) {
+            this.currentBurst = 0;
+            this.lastBurstTime = millis();
+            this.lastAttackTime = millis();
+        }
+        
+        if (this.currentBurst < this.burstCount && millis() - this.lastBurstTime > this.burstDelay) {
+            this.shootAttack(player);
+            this.currentBurst++;
+            this.lastBurstTime = millis();
+        }
+    }
+}
+
+// Wave Management System
+class WaveManager {
+    constructor() {
+        this.currentWave = 1;
+        this.enemiesPerWave = 5;
+        this.enemiesSpawnedThisWave = 0;
+        this.enemiesDefeatedThisWave = 0;
+        this.lastSpawnTime = 0;
+        this.spawnInterval = 2000; // Base spawn interval in ms
+        this.waveStartTime = 0;
+        this.interWaveDelay = 3000; // Delay between waves
+        
+        // Enemy type definitions with wave-based availability
+        this.enemyTypes = [
+            { class: GruntEnemy, name: 'grunt', minWave: 1, weight: 3 },
+            { class: AlienEnemy, name: 'alien', minWave: 2, weight: 2 },
+            { class: SaucerEnemy, name: 'saucer', minWave: 3, weight: 2 },
+            { class: SkullEnemy, name: 'skull', minWave: 4, weight: 1 },
+            { class: RobotEnemy, name: 'robot', minWave: 5, weight: 1 }
+        ];
+        
+        this.reset();
+    }
+    
+    reset() {
+        this.currentWave = 1;
+        this.enemiesPerWave = 5;
+        this.enemiesSpawnedThisWave = 0;
+        this.enemiesDefeatedThisWave = 0;
+        this.lastSpawnTime = millis();
+        this.waveStartTime = millis();
+    }
+    
+    update() {
+        // Check if it's time to spawn a new enemy
+        if (this.shouldSpawnEnemy()) {
+            this.spawnRandomEnemy();
+        }
+        
+        // Clean up off-screen enemies
+        this.cleanupOffscreenEnemies();
+    }
+    
+    shouldSpawnEnemy() {
+        return (
+            this.enemiesSpawnedThisWave < this.enemiesPerWave &&
+            millis() - this.lastSpawnTime > this.getCurrentSpawnInterval() &&
+            !isBossBattleActive &&
+            !portalPosition.active
+        );
+    }
+    
+    getCurrentSpawnInterval() {
+        // Spawn interval decreases with wave number (gets faster)
+        let waveMultiplier = max(0.3, 1 - (this.currentWave - 1) * 0.1);
+        return floor(this.spawnInterval * waveMultiplier);
+    }
+    
+    getAvailableEnemyTypes() {
+        return this.enemyTypes.filter(type => type.minWave <= this.currentWave);
+    }
+    
+    selectRandomEnemyType() {
+        let available = this.getAvailableEnemyTypes();
+        
+        // Create weighted selection
+        let totalWeight = available.reduce((sum, type) => sum + type.weight, 0);
+        let randomValue = random(totalWeight);
+        
+        let currentWeight = 0;
+        for (let type of available) {
+            currentWeight += type.weight;
+            if (randomValue <= currentWeight) {
+                return type;
+            }
+        }
+        
+        // Fallback to first available type
+        return available[0];
+    }
+    
+    spawnRandomEnemy() {
+        let enemyType = this.selectRandomEnemyType();
+        let spawnX = random(50, width - 50); // Spawn across the top
+        let spawnY = -50; // Spawn above screen
+        
+        let newEnemy = new enemyType.class(spawnX, spawnY, this.currentWave);
+        enemies.push(newEnemy);
+        
+        this.enemiesSpawnedThisWave++;
+        this.lastSpawnTime = millis();
+        
+        console.log(`Spawned ${enemyType.name} enemy (${this.enemiesSpawnedThisWave}/${this.enemiesPerWave}) - Wave ${this.currentWave}`);
+    }
+    
+    cleanupOffscreenEnemies() {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            if (enemies[i].isOffScreen()) {
+                console.log(`Removing off-screen ${enemies[i].variant} enemy`);
+                enemies.splice(i, 1);
+            }
+        }
+    }
+    
+    onEnemyDefeated() {
+        this.enemiesDefeatedThisWave++;
+        console.log(`Enemy defeated. Progress: ${this.enemiesDefeatedThisWave}/${this.enemiesPerWave}`);
+    }
+    
+    isWaveComplete() {
+        return (
+            this.enemiesSpawnedThisWave >= this.enemiesPerWave &&
+            this.enemiesDefeatedThisWave >= this.enemiesPerWave &&
+            enemies.length === 0
+        );
+    }
+    
+    shouldStartBossBattle() {
+        return this.isWaveComplete() && (this.currentWave % BOSS_APPEARS_WAVE) === 0;
+    }
+    
+    shouldAdvanceWave() {
+        return this.isWaveComplete() && (this.currentWave % BOSS_APPEARS_WAVE) !== 0;
+    }
+    
+    startBossBattle() {
+        console.log(`Starting boss battle after wave ${this.currentWave}`);
+        // Boss battle logic will be handled in main game loop
+        return true;
+    }
+    
+    advanceWave() {
+        this.currentWave++;
+        this.enemiesPerWave += 2; // Increase enemies per wave
+        this.enemiesSpawnedThisWave = 0;
+        this.enemiesDefeatedThisWave = 0;
+        this.lastSpawnTime = millis();
+        this.waveStartTime = millis();
+        
+        console.log(`Advanced to wave ${this.currentWave} with ${this.enemiesPerWave} enemies`);
+    }
+    
+    getWaveInfo() {
+        return {
+            current: this.currentWave,
+            enemiesSpawned: this.enemiesSpawnedThisWave,
+            enemiesPerWave: this.enemiesPerWave,
+            enemiesDefeated: this.enemiesDefeatedThisWave,
+            remaining: this.enemiesPerWave - this.enemiesDefeatedThisWave
+        };
+    }
+}
+
+// Spawn enemy function (now using WaveManager)
+function spawnEnemy() {
+    if (waveManager) {
+        waveManager.spawnRandomEnemy();
+    } else {
+        // Fallback to basic enemy spawning if waveManager not available
+        let x = random(50, width - 50);
+        let y = -50;
+        enemies.push(new GruntEnemy(x, y, currentWave));
+        enemiesSpawnedThisWave++;
+        lastEnemySpawnTime = millis();
     }
 }
 
