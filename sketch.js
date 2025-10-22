@@ -56,7 +56,10 @@ const allTalents = [
     { id: 'magnet_range', name: "磁力收集", description: "增加能量球吸引范围.", apply: (p) => { /* Handled in PowerUp class */ console.log("Magnet range increased!"); } },
     { id: 'powerup_boost', name: "能量强化", description: "能量球效果提升50%.", apply: (p) => { p.powerUpBonus = (p.powerUpBonus || 1) * 1.5; } },
     { id: 'gold_bonus', name: "黄金收集", description: "敌人掉落更多金币.", apply: (p) => { p.goldMultiplier = (p.goldMultiplier || 1) * 1.5; } },
-    { id: 'xp_boost', name: "经验提升", description: "获得经验+25%.", apply: (p) => { p.xpMultiplier = (p.xpMultiplier || 1) * 1.25; } }
+    { id: 'xp_boost', name: "经验提升", description: "获得经验+25%.", apply: (p) => { p.xpMultiplier = (p.xpMultiplier || 1) * 1.25; } },
+    { id: 'weapon_upgrade', name: "🔫 武器升级", description: "升级武器系统 (散射/速射/自动).", apply: (p) => { p.upgradeWeapon(); } },
+    { id: 'projectile_speed', name: "⚡ 子弹速度", description: "增加所有子弹的速度.", apply: (p) => { for(let pt of p.projectileTypes) pt.speed += 1; } },
+    { id: 'projectile_size', name: "💥 子弹威力", description: "增加子弹大小和生命周期.", apply: (p) => { for(let pt of p.projectileTypes) { pt.size += 1; pt.lifetime += 20; } } }
 ];
 let offeredTalents = [];
 let talentButtonHeight = 50;
@@ -411,6 +414,14 @@ function resetGame() {
     player.powerUpBonus = 1;
     player.goldMultiplier = 1;
     player.xpMultiplier = 1;
+    
+    // Reset weapon system
+    player.weaponLevel = 1;
+    player.weaponMode = 'single';
+    player.autoFire = false;
+    player.currentProjectileType = 0;
+    player.vx = 0;
+    player.vy = 0;
 
     shopInventory = [];    // Clear shop inventory on reset
     buyItemButtons = [];   // Clear buy buttons
@@ -690,7 +701,7 @@ function runGame() {
     // HUD background
     fill(0, 0, 0, 120);
     noStroke();
-    rect(5, 5, 200, 95);
+    rect(5, 5, 200, 160); // Expanded height for weapon stats
     rect(width - 155, 5, 150, 55);
     
     // Health display with emoji
@@ -738,6 +749,23 @@ function runGame() {
     textAlign(LEFT, TOP);
     let goldY = player.shields > 0 ? 95 : 75;
     text("💰 " + player.gold, 15, goldY);
+    
+    // Weapon stats display
+    let weaponY = goldY + 20;
+    fill(colorScheme.accent);
+    textSize(12);
+    text("🔫 Lvl " + player.weaponLevel + " " + player.weaponMode.toUpperCase(), 15, weaponY);
+    
+    if (player.autoFire) {
+        fill(100, 255, 100);
+        text("⚡ AUTO", 15, weaponY + 15);
+    }
+    
+    // Current projectile type
+    let currentProjectile = player.projectileTypes[player.currentProjectileType];
+    fill(255);
+    textSize(14);
+    text(currentProjectile.emoji + " DMG:" + (player.projectileDamage + currentProjectile.damage), 15, weaponY + (player.autoFire ? 30 : 15));
     
     // Wave/Boss info on the right
     fill(255);
@@ -1211,6 +1239,14 @@ class Player {
         this.x = x;
         this.y = y;
         this.size = 30;
+        
+        // Movement properties with acceleration
+        this.vx = 0;
+        this.vy = 0;
+        this.acceleration = 0.5;
+        this.friction = 0.8;
+        this.maxSpeed = 4;
+        
         // Stats that will be reset by resetGame and potentially modified by talents
         this.speed = 3;
         this.fireRate = 250; // ms per shot
@@ -1232,6 +1268,18 @@ class Player {
         this.isDashing = false;
         this.lastDashTime = -this.dashCooldown;
         this.dashEndTime = 0;
+
+        // Weapon system
+        this.weaponLevel = 1;
+        this.weaponMode = 'single'; // 'single', 'spread', 'rapid'
+        this.autoFire = false;
+        this.projectileTypes = [
+            { emoji: '💥', speed: 7, damage: 1, size: 5, lifetime: 120, color: [255, 100, 100] },
+            { emoji: '⭐', speed: 8, damage: 2, size: 6, lifetime: 100, color: [255, 255, 100] },
+            { emoji: '🔥', speed: 6, damage: 3, size: 7, lifetime: 90, color: [255, 150, 0] },
+            { emoji: '⚡', speed: 10, damage: 1, size: 4, lifetime: 80, color: [100, 200, 255] }
+        ];
+        this.currentProjectileType = 0;
 
         // Temporary boosts
         this.tempDamageBoost = 0;
@@ -1320,11 +1368,77 @@ class Player {
         if (millis() - this.lastShotTime > this.fireRate) {
             let angle = atan2(mouseY - this.y, mouseX - this.x);
             let totalDamage = this.projectileDamage + (this.tempDamageBoost || 0);
-            // type 'player', damage, color, speed, size
-            this.projectiles.push(new Projectile(this.x, this.y, angle, 'player', totalDamage, color(0, 150, 255), 7, 5));
+            let projectileType = this.projectileTypes[this.currentProjectileType];
+            
+            if (this.weaponMode === 'single') {
+                // Single shot
+                this.createProjectile(angle, totalDamage, projectileType);
+            } else if (this.weaponMode === 'spread') {
+                // Spread shot - 3 bullets in a cone
+                let spreadAngle = PI / 8; // 22.5 degrees spread
+                for (let i = -1; i <= 1; i++) {
+                    this.createProjectile(angle + i * spreadAngle, totalDamage, projectileType);
+                }
+            } else if (this.weaponMode === 'rapid') {
+                // Rapid fire - single bullet but faster fire rate handled in update()
+                this.createProjectile(angle, totalDamage, projectileType);
+            }
+            
             this.lastShotTime = millis();
             
             // Play shoot sound
+            playSound('shoot');
+        }
+    }
+    
+    createProjectile(angle, damage, projectileType) {
+        // Add some offset to spawn projectile slightly in front of player
+        let offsetX = cos(angle) * (this.size / 2 + 5);
+        let offsetY = sin(angle) * (this.size / 2 + 5);
+        
+        this.projectiles.push(new Projectile(
+            this.x + offsetX, 
+            this.y + offsetY, 
+            angle, 
+            'player', 
+            damage, 
+            projectileType.color,
+            projectileType.speed, 
+            projectileType.size,
+            projectileType.emoji,
+            projectileType.lifetime
+        ));
+    }
+    
+    upgradeWeapon() {
+        this.weaponLevel++;
+        if (this.weaponLevel === 2) {
+            this.weaponMode = 'spread';
+            console.log("Weapon upgraded to Spread Shot!");
+        } else if (this.weaponLevel === 3) {
+            this.weaponMode = 'rapid';
+            this.fireRate *= 0.6; // 40% faster fire rate
+            console.log("Weapon upgraded to Rapid Fire!");
+        } else if (this.weaponLevel === 4) {
+            this.autoFire = true;
+            console.log("Auto-fire enabled!");
+        } else if (this.weaponLevel >= 5) {
+            // Unlock new projectile types
+            this.currentProjectileType = min(this.projectileTypes.length - 1, floor(this.weaponLevel / 2));
+            console.log("Projectile upgraded to: " + this.projectileTypes[this.currentProjectileType].emoji);
+        }
+    }
+    
+    autoFireUpward() {
+        let angle = -PI / 2; // Straight up
+        let totalDamage = this.projectileDamage + (this.tempDamageBoost || 0);
+        let projectileType = this.projectileTypes[this.currentProjectileType];
+        
+        this.createProjectile(angle, totalDamage, projectileType);
+        this.lastShotTime = millis();
+        
+        // Play shoot sound (quieter for auto-fire)
+        if (random() < 0.3) { // Only play sound 30% of the time for auto-fire
             playSound('shoot');
         }
     }
@@ -1349,6 +1463,24 @@ class Player {
             this.move();
         }
         this.aim();
+        
+        // Auto-fire logic
+        if (this.autoFire && millis() - this.lastShotTime > this.fireRate) {
+            // Check if there are enemies to target
+            let hasTarget = false;
+            if (boss && isBossBattleActive) {
+                hasTarget = true;
+            } else if (currentEnemies.length > 0) {
+                hasTarget = true;
+            }
+            
+            if (hasTarget) {
+                this.shoot();
+            } else {
+                // Auto-fire upward when no enemies
+                this.autoFireUpward();
+            }
+        }
 
         // Player Projectile Logic
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -1392,7 +1524,8 @@ class Player {
                 }
             }
 
-            if (!projectileHit && p.isOffScreen()) {
+            // Clean up dead or off-screen projectiles
+            if (!projectileHit && p.isDead()) {
                 this.projectiles.splice(i, 1);
             }
         }
@@ -1400,13 +1533,48 @@ class Player {
 
 
     move() {
-        let currentSpeed = this.speed + (this.tempSpeedBoost || 0);
-        if (keyIsDown(87)) { this.y -= currentSpeed; } // W
-        if (keyIsDown(83)) { this.y += currentSpeed; } // S
-        if (keyIsDown(65)) { this.x -= currentSpeed; } // A
-        if (keyIsDown(68)) { this.x += currentSpeed; } // D
+        let currentAcceleration = this.acceleration + (this.tempSpeedBoost || 0) * 0.1;
+        let currentMaxSpeed = this.maxSpeed + (this.tempSpeedBoost || 0);
+        
+        // Handle input with acceleration
+        let inputX = 0, inputY = 0;
+        if (keyIsDown(87) || keyIsDown(UP_ARROW)) inputY -= 1; // W or Up
+        if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) inputY += 1; // S or Down
+        if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) inputX -= 1; // A or Left
+        if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) inputX += 1; // D or Right
+        
+        // Apply acceleration based on input
+        if (inputX !== 0) {
+            this.vx += inputX * currentAcceleration;
+        } else {
+            this.vx *= this.friction; // Apply friction when no input
+        }
+        
+        if (inputY !== 0) {
+            this.vy += inputY * currentAcceleration;
+        } else {
+            this.vy *= this.friction; // Apply friction when no input
+        }
+        
+        // Limit velocity to max speed
+        this.vx = constrain(this.vx, -currentMaxSpeed, currentMaxSpeed);
+        this.vy = constrain(this.vy, -currentMaxSpeed, currentMaxSpeed);
+        
+        // Update position
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // Keep player within screen bounds
         this.x = constrain(this.x, this.size / 2, width - this.size / 2);
         this.y = constrain(this.y, this.size / 2, height - this.size / 2);
+        
+        // Stop velocity if hitting screen bounds
+        if (this.x <= this.size / 2 || this.x >= width - this.size / 2) {
+            this.vx = 0;
+        }
+        if (this.y <= this.size / 2 || this.y >= height - this.size / 2) {
+            this.vy = 0;
+        }
     }
 
     aim() { /* Implicit via mouse */ }
@@ -1446,55 +1614,131 @@ class Player {
         strokeWeight(3);
         line(0, 0, this.size / 2 + 10, 0);
         
+        // Reset rotation for emoji
+        rotate(-angle);
+        
         // Add emoji face
         fill(255);
         noStroke();
         textAlign(CENTER, CENTER);
-        textSize(16);
+        textSize(20);
         text("🚀", 0, 0);
         
         pop();
+        
+        // Health bar above player
+        this.drawHealthBar();
+    }
+    
+    drawHealthBar() {
+        let barWidth = this.size + 10;
+        let barHeight = 6;
+        let barX = this.x - barWidth / 2;
+        let barY = this.y - this.size / 2 - 15;
+        
+        // Background bar
+        fill(100, 100, 100);
+        noStroke();
+        rect(barX, barY, barWidth, barHeight);
+        
+        // Health bar
+        let healthPercent = this.health / this.maxHealth;
+        let healthColor;
+        if (healthPercent > 0.6) {
+            healthColor = color(100, 255, 100); // Green
+        } else if (healthPercent > 0.3) {
+            healthColor = color(255, 255, 100); // Yellow
+        } else {
+            healthColor = color(255, 100, 100); // Red
+        }
+        
+        fill(healthColor);
+        rect(barX, barY, barWidth * healthPercent, barHeight);
+        
+        // Shields bar (if any)
+        if (this.maxShields > 0 && this.shields > 0) {
+            let shieldPercent = this.shields / this.maxShields;
+            fill(100, 200, 255, 150);
+            rect(barX, barY - barHeight - 2, barWidth * shieldPercent, barHeight);
+        }
+        
+        // Health text
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(8);
+        text(this.health + "/" + this.maxHealth, this.x, barY + barHeight / 2);
     }
 }
 
 class Projectile {
-    constructor(x, y, angle, type, damage, pColor, speed, size) {
+    constructor(x, y, angle, type, damage, pColor, speed, size, emoji = null, lifetime = 120) {
         this.x = x;
         this.y = y;
         this.angle = angle;
         this.type = type; // 'player', 'enemy', 'boss'
         this.damage = damage;
-        this.pColor = pColor;
+        this.pColor = Array.isArray(pColor) ? color(pColor[0], pColor[1], pColor[2]) : pColor;
         this.speed = speed;
         this.size = size;
+        this.emoji = emoji;
+        this.lifetime = lifetime; // frames to live
+        this.age = 0;
+        this.dead = false;
     }
+    
     update() {
         this.x += cos(this.angle) * this.speed;
         this.y += sin(this.angle) * this.speed;
+        this.age++;
+        
+        // Mark as dead if lifetime exceeded
+        if (this.age >= this.lifetime) {
+            this.dead = true;
+        }
     }
+    
     display() {
         push();
         translate(this.x + screenShake.x, this.y + screenShake.y);
         
-        // Projectile glow effect
-        fill(this.pColor);
-        noStroke();
-        ellipse(0, 0, this.size + 2, this.size + 2);
-        
-        // Inner bright core
-        fill(255, 200);
-        ellipse(0, 0, this.size * 0.6, this.size * 0.6);
+        if (this.emoji && this.type === 'player') {
+            // Render emoji for player projectiles
+            fill(255);
+            textAlign(CENTER, CENTER);
+            textSize(this.size * 2);
+            text(this.emoji, 0, 0);
+            
+            // Add subtle glow effect
+            fill(this.pColor.levels[0], this.pColor.levels[1], this.pColor.levels[2], 50);
+            noStroke();
+            ellipse(0, 0, this.size + 4, this.size + 4);
+        } else {
+            // Traditional projectile glow effect for non-emoji projectiles
+            fill(this.pColor);
+            noStroke();
+            ellipse(0, 0, this.size + 2, this.size + 2);
+            
+            // Inner bright core
+            fill(255, 200);
+            ellipse(0, 0, this.size * 0.6, this.size * 0.6);
+        }
         
         // Add trail particles occasionally
-        if (random() < 0.3) {
+        if (random() < 0.2) {
             let trailColor = [red(this.pColor), green(this.pColor), blue(this.pColor)];
-            particles.push(new Particle(this.x, this.y, trailColor, this.size * 0.5));
+            particles.push(new Particle(this.x, this.y, trailColor, this.size * 0.3));
         }
         
         pop();
     }
+    
     isOffScreen() {
-        return (this.x < -this.size || this.x > width + this.size || this.y < -this.size || this.y > height + this.size);
+        return (this.x < -this.size || this.x > width + this.size || 
+                this.y < -this.size || this.y > height + this.size);
+    }
+    
+    isDead() {
+        return this.dead || this.isOffScreen();
     }
 }
 
