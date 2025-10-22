@@ -1,5 +1,6 @@
 let player;
 let enemies = [];
+let powerUps = [];
 const ENEMY_SPAWN_INTERVAL = 2000;
 let lastEnemySpawnTime = 0;
 let gameState = 'start'; // 'start', 'playing', 'gameOver', 'talentSelection', 'shop'
@@ -49,7 +50,12 @@ const allTalents = [
     { id: 'speed_boost', name: "+0.5 速度", description: "提高移动速度.", apply: (p) => { p.speed += 0.5; } },
     { id: 'firerate_boost', name: "-20% 射速", description: "提高射击速度（减少延迟）.", apply: (p) => { p.fireRate *= 0.8; } },
     { id: 'damage_boost', name: "+1 子弹伤害", description: "你的子弹造成更多伤害.", apply: (p) => { p.projectileDamage += 1; } },
-    { id: 'dash_cooldown', name: "-20% 冲刺冷却", description: "减少冲刺冷却时间.", apply: (p) => { p.dashCooldown *= 0.8; } }
+    { id: 'dash_cooldown', name: "-20% 冲刺冷却", description: "减少冲刺冷却时间.", apply: (p) => { p.dashCooldown *= 0.8; } },
+    { id: 'shield_capacity', name: "+2 最大护盾", description: "增加护盾容量.", apply: (p) => { p.maxShields += 2; p.shields += 2; } },
+    { id: 'magnet_range', name: "磁力收集", description: "增加能量球吸引范围.", apply: (p) => { /* Handled in PowerUp class */ console.log("Magnet range increased!"); } },
+    { id: 'powerup_boost', name: "能量强化", description: "能量球效果提升50%.", apply: (p) => { p.powerUpBonus = (p.powerUpBonus || 1) * 1.5; } },
+    { id: 'gold_bonus', name: "黄金收集", description: "敌人掉落更多金币.", apply: (p) => { p.goldMultiplier = (p.goldMultiplier || 1) * 1.5; } },
+    { id: 'xp_boost', name: "经验提升", description: "获得经验+25%.", apply: (p) => { p.xpMultiplier = (p.xpMultiplier || 1) * 1.25; } }
 ];
 let offeredTalents = [];
 let talentButtonHeight = 50;
@@ -85,6 +91,150 @@ const allItems = [
     new Item('gold_magnet', 'Gold Magnet', 'Increases gold from enemies (NYI).', (player) => { /* player.goldBonus += 0.1; */ console.log("Gold Magnet effect (NYI)"); }, 'legendary')
     // NYI: Not Yet Implemented for gold bonus part.
 ];
+
+// Power-up System
+class PowerUp {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.size = 25;
+        this.bobOffset = random(0, TWO_PI);
+        this.magnetRange = 60;
+        this.collected = false;
+        this.lifespan = 30000; // 30 seconds before disappearing
+        this.spawnTime = millis();
+        
+        // Visual effects
+        this.glowIntensity = 0;
+        this.glowDirection = 1;
+    }
+    
+    update(player) {
+        // Bob up and down
+        this.bobOffset += 0.05;
+        
+        // Glow effect
+        this.glowIntensity += this.glowDirection * 3;
+        if (this.glowIntensity > 100 || this.glowIntensity < 0) {
+            this.glowDirection *= -1;
+        }
+        
+        // Magnetic attraction to player
+        let distanceToPlayer = dist(this.x, this.y, player.x, player.y);
+        if (distanceToPlayer < this.magnetRange) {
+            let pullForce = map(distanceToPlayer, 0, this.magnetRange, 8, 0);
+            let angle = atan2(player.y - this.y, player.x - this.x);
+            this.x += cos(angle) * pullForce;
+            this.y += sin(angle) * pullForce;
+        }
+        
+        // Collection check
+        if (distanceToPlayer < this.size/2 + player.size/2) {
+            this.applyEffect(player);
+            this.collected = true;
+            playSound('pickup');
+            createExplosion(this.x, this.y, this.getColor(), 8);
+        }
+    }
+    
+    display() {
+        push();
+        translate(this.x + screenShake.x, this.y + screenShake.y + sin(this.bobOffset) * 3);
+        
+        // Outer glow
+        let glowColor = this.getColor();
+        fill(glowColor[0], glowColor[1], glowColor[2], this.glowIntensity);
+        noStroke();
+        ellipse(0, 0, this.size + 15, this.size + 15);
+        
+        // Main body
+        fill(glowColor[0], glowColor[1], glowColor[2], 200);
+        stroke(255);
+        strokeWeight(2);
+        ellipse(0, 0, this.size, this.size);
+        
+        // Emoji
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(this.size * 0.7);
+        text(this.getEmoji(), 0, 0);
+        
+        pop();
+    }
+    
+    applyEffect(player) {
+        let bonus = player.powerUpBonus || 1;
+        
+        switch(this.type) {
+            case 'health':
+                let healthRestore = ceil(3 * bonus);
+                player.health = min(player.maxHealth, player.health + healthRestore);
+                console.log("Health restored! Amount: " + healthRestore + ", Current: " + player.health);
+                break;
+            case 'shield':
+                let shieldGain = ceil(2 * bonus);
+                player.shields = min(player.maxShields, player.shields + shieldGain);
+                console.log("Shield gained! Amount: " + shieldGain + ", Current: " + player.shields);
+                break;
+            case 'damage':
+                let damageBoost = bonus;
+                player.tempDamageBoost = (player.tempDamageBoost || 0) + damageBoost;
+                player.tempDamageBoostTime = millis() + 15000; // 15 seconds
+                console.log("Damage boost! Bonus: " + damageBoost + ", Total: " + player.tempDamageBoost);
+                break;
+            case 'speed':
+                let speedBoost = 0.5 * bonus;
+                player.tempSpeedBoost = (player.tempSpeedBoost || 0) + speedBoost;
+                player.tempSpeedBoostTime = millis() + 12000; // 12 seconds
+                console.log("Speed boost! Bonus: " + speedBoost + ", Total: " + player.tempSpeedBoost);
+                break;
+            case 'xp':
+                let xpGain = ceil(8 * bonus * (player.xpMultiplier || 1));
+                player.gainXP(xpGain);
+                console.log("XP boost gained! Amount: " + xpGain);
+                break;
+            case 'gold':
+                let goldGain = ceil(random(3, 8) * bonus);
+                player.gold += goldGain;
+                console.log("Gold found! Amount: " + goldGain + ", Current: " + player.gold);
+                break;
+        }
+    }
+    
+    getEmoji() {
+        switch(this.type) {
+            case 'health': return '❤️';
+            case 'shield': return '🛡️';
+            case 'damage': return '💎';
+            case 'speed': return '⭐';
+            case 'xp': return '🔋';
+            case 'gold': return '💰';
+            default: return '❓';
+        }
+    }
+    
+    getColor() {
+        switch(this.type) {
+            case 'health': return [255, 100, 100];
+            case 'shield': return [100, 200, 255];
+            case 'damage': return [255, 100, 255];
+            case 'speed': return [255, 255, 100];
+            case 'xp': return [100, 255, 100];
+            case 'gold': return [255, 215, 0];
+            default: return [255, 255, 255];
+        }
+    }
+    
+    isExpired() {
+        return millis() - this.spawnTime > this.lifespan;
+    }
+}
+
+// Power-up drop chances and types
+const POWER_UP_TYPES = ['health', 'shield', 'damage', 'speed', 'xp', 'gold'];
+const POWER_UP_DROP_CHANCE = 0.25; // 25% chance per enemy
 
 // Audio initialization
 function initAudio() {
@@ -238,6 +388,7 @@ function resetGame() {
 
     // Core player state
     player.health = player.maxHealth;
+    player.shields = 0;
     player.x = width / 2;
     player.y = height / 2;
     player.projectiles = [];
@@ -247,11 +398,23 @@ function resetGame() {
     player.lastShotTime = 0;
     player.inventory = []; // Clear inventory
     player.gold = 0;       // Reset gold
+    
+    // Reset temporary boosts
+    player.tempDamageBoost = 0;
+    player.tempDamageBoostTime = 0;
+    player.tempSpeedBoost = 0;
+    player.tempSpeedBoostTime = 0;
+    
+    // Reset talent multipliers
+    player.powerUpBonus = 1;
+    player.goldMultiplier = 1;
+    player.xpMultiplier = 1;
 
     shopInventory = [];    // Clear shop inventory on reset
     buyItemButtons = [];   // Clear buy buttons
 
     enemies = [];
+    powerUps = [];         // Clear power-ups on reset
     currentWave = 1;
     enemiesPerWave = 5;
     enemiesSpawnedThisWave = 0;
@@ -390,6 +553,16 @@ function runGame() {
     player.display(); // Player display first
     player.update(enemies, currentBoss); // Player update handles its movement and projectile logic
 
+    // Update and display power-ups
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+        powerUps[i].update(player);
+        powerUps[i].display();
+        
+        if (powerUps[i].collected || powerUps[i].isExpired()) {
+            powerUps.splice(i, 1);
+        }
+    }
+
     if (isBossBattleActive) {
         if (currentBoss) {
             currentBoss.update(player);
@@ -441,12 +614,16 @@ function runGame() {
 
         // Wave Transition Logic / Boss Trigger
         if (enemiesSpawnedThisWave >= enemiesPerWave && enemiesDefeatedThisWave >= enemiesPerWave && enemies.length === 0) {
-            if (currentWave === BOSS_APPEARS_WAVE - 1) {
+            if ((currentWave % BOSS_APPEARS_WAVE) === 0) { // Boss every 3 waves
                 isBossBattleActive = true;
                 enemiesSpawnedThisWave = 0;
                 enemiesDefeatedThisWave = 0;
-                currentBoss = new Boss(width / 2, 120);
-                console.log("BOSS INCOMING!");
+                
+                // Choose random boss variant
+                let bossVariants = ['standard', 'sweeper', 'summoner', 'beamer'];
+                let chosenVariant = random(bossVariants);
+                currentBoss = new Boss(width / 2, 120, chosenVariant);
+                console.log("BOSS INCOMING! Type: " + chosenVariant);
                 enemies = [];
             } else {
                 currentWave++;
@@ -518,32 +695,45 @@ function runGame() {
     textAlign(LEFT, TOP);
     text("❤️ " + player.health + "/" + player.maxHealth, 15, 15);
     
-    // Level display
-    fill(colorScheme.accent);
-    text("⭐ " + player.level, 15, 35);
+    // Shield display
+    if (player.shields > 0) {
+        fill(100, 200, 255);
+        text("🛡️ " + player.shields + "/" + player.maxShields, 15, 35);
+        
+        // Level display moved down if shields are shown
+        fill(colorScheme.accent);
+        text("⭐ " + player.level, 15, 55);
+    } else {
+        // Level display in normal position
+        fill(colorScheme.accent);
+        text("⭐ " + player.level, 15, 35);
+    }
     
     // XP Bar with better styling
     let xpBarWidth = 120;
     let xpBarHeight = 12;
+    let xpBarY = player.shields > 0 ? 75 : 55; // Adjust position based on shield display
+    
     fill(50);
     stroke(100);
-    rect(15, 55, xpBarWidth, xpBarHeight);
+    rect(15, xpBarY, xpBarWidth, xpBarHeight);
     
     fill(colorScheme.success);
     noStroke();
     let xpProgress = constrain(map(player.xp, 0, player.xpToNextLevel, 0, xpBarWidth), 0, xpBarWidth);
-    rect(15, 55, xpProgress, xpBarHeight);
+    rect(15, xpBarY, xpProgress, xpBarHeight);
     
     fill(255);
     textSize(10);
     textAlign(CENTER, CENTER);
-    text(player.xp + "/" + player.xpToNextLevel, 15 + xpBarWidth/2, 55 + xpBarHeight/2 + 1);
+    text(player.xp + "/" + player.xpToNextLevel, 15 + xpBarWidth/2, xpBarY + xpBarHeight/2 + 1);
     
     // Gold display with emoji
     fill(colorScheme.gold);
     textSize(16);
     textAlign(LEFT, TOP);
-    text("💰 " + player.gold, 15, 75);
+    let goldY = player.shields > 0 ? 95 : 75;
+    text("💰 " + player.gold, 15, goldY);
     
     // Wave/Boss info on the right
     fill(255);
@@ -679,6 +869,11 @@ function drawTalentSelectionScreen() {
         else if (talent.id.includes('fire')) emoji = "🔫";
         else if (talent.id.includes('damage')) emoji = "💥";
         else if (talent.id.includes('dash')) emoji = "🏃";
+        else if (talent.id.includes('shield')) emoji = "🛡️";
+        else if (talent.id.includes('magnet')) emoji = "🧲";
+        else if (talent.id.includes('powerup')) emoji = "💎";
+        else if (talent.id.includes('gold')) emoji = "💰";
+        else if (talent.id.includes('xp')) emoji = "🔋";
 
         fill(0);
         noStroke();
@@ -1023,6 +1218,8 @@ class Player {
 
         // Core state
         this.health = this.maxHealth;
+        this.shields = 0;
+        this.maxShields = 5;
         this.projectiles = [];
         this.level = 1;
         this.xp = 0;
@@ -1031,6 +1228,17 @@ class Player {
         this.isDashing = false;
         this.lastDashTime = -this.dashCooldown;
         this.dashEndTime = 0;
+
+        // Temporary boosts
+        this.tempDamageBoost = 0;
+        this.tempDamageBoostTime = 0;
+        this.tempSpeedBoost = 0;
+        this.tempSpeedBoostTime = 0;
+        
+        // Talent multipliers
+        this.powerUpBonus = 1;
+        this.goldMultiplier = 1;
+        this.xpMultiplier = 1;
 
         // Item related
         this.inventory = [];
@@ -1077,14 +1285,29 @@ class Player {
     }
 
     takeDamage(amount) {
-        this.health -= amount;
-        if (this.health < 0) this.health = 0;
+        if (this.shields > 0) {
+            // Shields absorb damage first
+            let shieldDamage = min(amount, this.shields);
+            this.shields -= shieldDamage;
+            amount -= shieldDamage;
+            
+            // Shield break effect
+            if (shieldDamage > 0) {
+                createExplosion(this.x, this.y, [100, 200, 255], 4);
+                console.log("Shield absorbed " + shieldDamage + " damage. Shields remaining: " + this.shields);
+            }
+        }
         
-        // Add visual and audio feedback for taking damage
-        playSound('hit');
-        addScreenShake(5, 10);
-        createExplosion(this.x, this.y, [255, 100, 100], 6);
-        this.hitFlashTime = millis() + 200; // Flash for 200ms
+        if (amount > 0) {
+            this.health -= amount;
+            if (this.health < 0) this.health = 0;
+            
+            // Add visual and audio feedback for taking health damage
+            playSound('hit');
+            addScreenShake(5, 10);
+            createExplosion(this.x, this.y, [255, 100, 100], 6);
+            this.hitFlashTime = millis() + 200; // Flash for 200ms
+        }
         
         // Could add invulnerability frames here
     }
@@ -1092,8 +1315,9 @@ class Player {
     shoot() {
         if (millis() - this.lastShotTime > this.fireRate) {
             let angle = atan2(mouseY - this.y, mouseX - this.x);
+            let totalDamage = this.projectileDamage + (this.tempDamageBoost || 0);
             // type 'player', damage, color, speed, size
-            this.projectiles.push(new Projectile(this.x, this.y, angle, 'player', this.projectileDamage, color(0, 150, 255), 7, 5));
+            this.projectiles.push(new Projectile(this.x, this.y, angle, 'player', totalDamage, color(0, 150, 255), 7, 5));
             this.lastShotTime = millis();
             
             // Play shoot sound
@@ -1102,6 +1326,19 @@ class Player {
     }
 
     update(currentEnemies, boss) {
+        // Handle temporary boosts expiration
+        if (this.tempDamageBoostTime > 0 && millis() > this.tempDamageBoostTime) {
+            this.tempDamageBoost = 0;
+            this.tempDamageBoostTime = 0;
+            console.log("Damage boost expired");
+        }
+        
+        if (this.tempSpeedBoostTime > 0 && millis() > this.tempSpeedBoostTime) {
+            this.tempSpeedBoost = 0;
+            this.tempSpeedBoostTime = 0;
+            console.log("Speed boost expired");
+        }
+        
         if (this.isDashing) {
             if (millis() > this.dashEndTime) this.isDashing = false;
         } else {
@@ -1121,6 +1358,23 @@ class Player {
                    boss.takeDamage(p.damage);
                    this.projectiles.splice(i, 1);
                    projectileHit = true;
+               }
+               
+               // Check collision with minions
+               if (!projectileHit) {
+                   for (let k = boss.minions.length - 1; k >= 0; k--) {
+                       let minion = boss.minions[k];
+                       if (dist(p.x, p.y, minion.x, minion.y) < p.size / 2 + minion.size / 2) {
+                           minion.takeDamage(p.damage);
+                           this.projectiles.splice(i, 1);
+                           projectileHit = true;
+                           
+                           if (minion.health <= 0) {
+                               boss.minions.splice(k, 1);
+                           }
+                           break;
+                       }
+                   }
                }
             } else if (!isBossBattleActive) {
                 for (let j = currentEnemies.length - 1; j >= 0; j--) {
@@ -1142,10 +1396,11 @@ class Player {
 
 
     move() {
-        if (keyIsDown(87)) { this.y -= this.speed; } // W
-        if (keyIsDown(83)) { this.y += this.speed; } // S
-        if (keyIsDown(65)) { this.x -= this.speed; } // A
-        if (keyIsDown(68)) { this.x += this.speed; } // D
+        let currentSpeed = this.speed + (this.tempSpeedBoost || 0);
+        if (keyIsDown(87)) { this.y -= currentSpeed; } // W
+        if (keyIsDown(83)) { this.y += currentSpeed; } // S
+        if (keyIsDown(65)) { this.x -= currentSpeed; } // A
+        if (keyIsDown(68)) { this.x += currentSpeed; } // D
         this.x = constrain(this.x, this.size / 2, width - this.size / 2);
         this.y = constrain(this.y, this.size / 2, height - this.size / 2);
     }
@@ -1323,9 +1578,19 @@ class Enemy {
         createExplosion(this.x, this.y, [255, 150, 50], 4);
         
         if (this.health <= 0) {
-            player.gainXP(this.xpValue); // Grant XP from here
-            player.gold += this.goldValue;
-            console.log("Enemy defeated. Player gold: " + player.gold);
+            let xpGain = ceil(this.xpValue * (player.xpMultiplier || 1));
+            let goldGain = ceil(this.goldValue * (player.goldMultiplier || 1));
+            
+            player.gainXP(xpGain); // Grant XP from here  
+            player.gold += goldGain;
+            console.log("Enemy defeated. XP: +" + xpGain + ", Gold: +" + goldGain + ", Total gold: " + player.gold);
+            
+            // Power-up drop chance
+            if (random() < POWER_UP_DROP_CHANCE) {
+                let powerUpType = random(POWER_UP_TYPES);
+                powerUps.push(new PowerUp(this.x, this.y, powerUpType));
+                console.log("Power-up dropped: " + powerUpType);
+            }
             
             // Death explosion
             createExplosion(this.x, this.y, [255, 100, 50], 12);
@@ -1338,7 +1603,7 @@ class Enemy {
 }
 
 class Boss {
-    constructor(x, y) {
+    constructor(x, y, variant = 'standard') {
         this.x = x;
         this.y = y;
         this.size = 70;
@@ -1346,13 +1611,26 @@ class Boss {
         this.health = 60 + (currentWave - (BOSS_APPEARS_WAVE -1)) * 10; // Scale health if re-appears
         this.maxHealth = this.health;
         this.color = color(80, 0, 120);
+        this.variant = variant;
+        this.phase = 1;
+        this.maxPhases = 3;
 
         this.attackCooldown = 1500;
         this.lastAttackTime = millis();
         this.projectiles = []; // Renamed from bossProjectiles for consistency
+        this.minions = [];
         this.xpValue = 50;
         this.projectileDamage = 2 + floor((currentWave - (BOSS_APPEARS_WAVE -1))*0.5);
         this.goldValue = 25 + floor((currentWave - (BOSS_APPEARS_WAVE -1))*5); // e.g. 25 base, +5 per boss cycle
+        
+        // Pattern-specific variables
+        this.sweepAngle = 0;
+        this.beamChargeTime = 0;
+        this.beamDuration = 0;
+        this.isChargingBeam = false;
+        this.isFiringBeam = false;
+        this.lastMinionSpawn = 0;
+        this.minionSpawnCooldown = 8000; // 8 seconds
     }
 
     getDroppedItem() {
@@ -1364,10 +1642,29 @@ class Boss {
     }
 
     update(player) {
+        // Update phase based on health
+        let healthPercent = this.health / this.maxHealth;
+        if (healthPercent > 0.66) {
+            this.phase = 1;
+        } else if (healthPercent > 0.33) {
+            this.phase = 2;
+        } else {
+            this.phase = 3;
+        }
+        
         this.move(player);
-        if (millis() - this.lastAttackTime > this.attackCooldown) {
-            this.shootAttack(player);
-            this.lastAttackTime = millis();
+        
+        // Different attack patterns based on variant and phase
+        this.handleAttackPattern(player);
+        
+        // Update minions
+        for (let i = this.minions.length - 1; i >= 0; i--) {
+            this.minions[i].update(player);
+            if (this.minions[i].health <= 0) {
+                // Minion death effects
+                createExplosion(this.minions[i].x, this.minions[i].y, [255, 100, 50], 8);
+                this.minions.splice(i, 1);
+            }
         }
 
         // Boss Projectile Logic
@@ -1383,6 +1680,20 @@ class Boss {
                 this.projectiles.splice(i, 1);
             }
         }
+        
+        // Handle beam attack
+        if (this.isFiringBeam) {
+            this.drawBeam(player);
+            this.beamDuration -= 16; // Approximate frame time
+            if (this.beamDuration <= 0) {
+                this.isFiringBeam = false;
+            }
+            
+            // Beam damage detection
+            if (this.beamHitsPlayer(player)) {
+                player.takeDamage(this.projectileDamage * 2); // Beam does double damage
+            }
+        }
     }
 
     move(player) {
@@ -1396,13 +1707,133 @@ class Boss {
         this.y = constrain(this.y, this.size/2, height/2);
     }
 
+    handleAttackPattern(player) {
+        switch(this.variant) {
+            case 'sweeper':
+                this.handleSweeperPattern(player);
+                break;
+            case 'summoner':
+                this.handleSummonerPattern(player);
+                break;
+            case 'beamer':
+                this.handleBeamerPattern(player);
+                break;
+            default:
+                this.handleStandardPattern(player);
+        }
+    }
+    
+    handleStandardPattern(player) {
+        if (millis() - this.lastAttackTime > this.attackCooldown) {
+            this.shootAttack(player);
+            this.lastAttackTime = millis();
+        }
+    }
+    
+    handleSweeperPattern(player) {
+        if (millis() - this.lastAttackTime > this.attackCooldown / 2) { // Faster attacks
+            this.sweepAttack(player);
+            this.lastAttackTime = millis();
+        }
+    }
+    
+    handleSummonerPattern(player) {
+        if (millis() - this.lastAttackTime > this.attackCooldown) {
+            this.shootAttack(player);
+            this.lastAttackTime = millis();
+        }
+        
+        // Spawn minions
+        if (millis() - this.lastMinionSpawn > this.minionSpawnCooldown && this.minions.length < this.phase + 1) {
+            this.spawnMinion();
+            this.lastMinionSpawn = millis();
+        }
+    }
+    
+    handleBeamerPattern(player) {
+        if (!this.isChargingBeam && !this.isFiringBeam && millis() - this.lastAttackTime > this.attackCooldown) {
+            if (random() < 0.3) { // 30% chance for beam attack
+                this.startBeamAttack();
+            } else {
+                this.shootAttack(player);
+            }
+            this.lastAttackTime = millis();
+        }
+        
+        if (this.isChargingBeam) {
+            this.beamChargeTime -= 16;
+            if (this.beamChargeTime <= 0) {
+                this.isChargingBeam = false;
+                this.isFiringBeam = true;
+                this.beamDuration = 2000; // 2 second beam
+            }
+        }
+    }
+
     shootAttack(player) {
         let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
-        for (let i = -1; i <= 1; i++) {
-            let currentAngle = angleToPlayer + (i * PI / 12);
+        let bulletCount = this.phase + 2; // More bullets per phase
+        for (let i = 0; i < bulletCount; i++) {
+            let spreadAngle = (i - bulletCount/2) * PI / 12;
+            let currentAngle = angleToPlayer + spreadAngle;
             // type 'boss', damage, color, speed, size
             this.projectiles.push(new Projectile(this.x, this.y, currentAngle, 'boss', this.projectileDamage, color(255, 100, 0), 4, 10));
         }
+    }
+    
+    sweepAttack(player) {
+        let bulletCount = 5 + this.phase; // More bullets in higher phases
+        for (let i = 0; i < bulletCount; i++) {
+            let angle = this.sweepAngle + (i * PI / bulletCount);
+            this.projectiles.push(new Projectile(this.x, this.y, angle, 'boss', this.projectileDamage, color(255, 150, 0), 3, 8));
+        }
+        this.sweepAngle += PI / 8; // Rotate sweep pattern
+    }
+    
+    spawnMinion() {
+        let spawnX = this.x + random(-100, 100);
+        let spawnY = this.y + random(50, 100);
+        spawnX = constrain(spawnX, 50, width - 50);
+        spawnY = constrain(spawnY, 50, height - 50);
+        
+        this.minions.push(new BossMinion(spawnX, spawnY));
+        console.log("Boss spawned a minion!");
+    }
+    
+    startBeamAttack() {
+        this.isChargingBeam = true;
+        this.beamChargeTime = 1500; // 1.5 second charge time
+        console.log("Boss charging beam attack!");
+    }
+    
+    drawBeam(player) {
+        push();
+        stroke(255, 0, 0, 200);
+        strokeWeight(15);
+        line(this.x, this.y, player.x, player.y);
+        
+        // Beam core
+        stroke(255, 255, 255, 255);
+        strokeWeight(5);
+        line(this.x, this.y, player.x, player.y);
+        pop();
+        
+        // Beam particles
+        for (let i = 0; i < 3; i++) {
+            let t = i / 3;
+            let beamX = lerp(this.x, player.x, t) + random(-10, 10);
+            let beamY = lerp(this.y, player.y, t) + random(-10, 10);
+            particles.push(new Particle(beamX, beamY, [255, 100, 100], 8));
+        }
+    }
+    
+    beamHitsPlayer(player) {
+        // Simple distance check for beam collision
+        let d = dist(this.x, this.y, player.x, player.y);
+        if (d < 300) { // Beam range
+            return true;
+        }
+        return false;
     }
 
     takeDamage(amount) { // Called by player projectiles
@@ -1431,25 +1862,57 @@ class Boss {
         push();
         translate(this.x + screenShake.x, this.y + screenShake.y);
         
-        // Boss body
-        fill(this.color);
+        // Boss charging effect
+        if (this.isChargingBeam) {
+            let chargeIntensity = map(1500 - this.beamChargeTime, 0, 1500, 0, 100);
+            fill(255, 0, 0, chargeIntensity);
+            noStroke();
+            ellipse(0, 0, this.size + 30, this.size + 30);
+        }
+        
+        // Boss body with variant colors
+        let bossColor = this.getBossColor();
+        fill(bossColor);
         stroke(0);
         strokeWeight(3);
         rectMode(CENTER);
         rect(0, 0, this.size, this.size);
         
-        // Boss face emoji
+        // Boss face emoji based on variant
         fill(255);
         noStroke();
         textAlign(CENTER, CENTER);
         textSize(this.size * 0.8);
-        text("💀", 0, 0);
+        text(this.getBossEmoji(), 0, 0);
         
         pop();
+        
+        // Display minions
+        for (let minion of this.minions) {
+            minion.display();
+        }
         
         // Health bar (not affected by screen shake)
         this.drawHealthBar();
         rectMode(CORNER);
+    }
+    
+    getBossColor() {
+        switch(this.variant) {
+            case 'sweeper': return color(255, 100, 0); // Orange
+            case 'summoner': return color(150, 0, 255); // Purple
+            case 'beamer': return color(255, 0, 100); // Red-pink
+            default: return color(80, 0, 120); // Dark purple
+        }
+    }
+    
+    getBossEmoji() {
+        switch(this.variant) {
+            case 'sweeper': return '🌀';
+            case 'summoner': return '👑';
+            case 'beamer': return '👁️';
+            default: return '💀';
+        }
     }
 
     drawHealthBar() {
@@ -1470,5 +1933,84 @@ class Boss {
         noFill();
         stroke(0);
         rect(xPos, yPos, barWidth, barHeight);
+    }
+}
+
+// Boss Minion class
+class BossMinion {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 25;
+        this.speed = 1.2;
+        this.health = 3;
+        this.maxHealth = 3;
+        this.color = color(150, 100, 200);
+        this.projectiles = [];
+        this.attackCooldown = 3000;
+        this.lastAttackTime = millis() + random(-1000, 1000);
+        this.projectileDamage = 1;
+    }
+    
+    update(player) {
+        // Move towards player
+        let angle = atan2(player.y - this.y, player.x - this.x);
+        this.x += cos(angle) * this.speed;
+        this.y += sin(angle) * this.speed;
+        
+        // Attack player
+        if (millis() - this.lastAttackTime > this.attackCooldown) {
+            this.shootAttack(player);
+            this.lastAttackTime = millis();
+        }
+        
+        // Update projectiles
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            let p = this.projectiles[i];
+            p.update();
+            p.display();
+            
+            if (dist(player.x, player.y, p.x, p.y) < player.size/2 + p.size/2) {
+                player.takeDamage(p.damage);
+                this.projectiles.splice(i, 1);
+            } else if (p.isOffScreen()) {
+                this.projectiles.splice(i, 1);
+            }
+        }
+    }
+    
+    shootAttack(player) {
+        let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
+        this.projectiles.push(new Projectile(this.x, this.y, angleToPlayer, 'enemy', this.projectileDamage, color(200, 100, 255), 2, 6));
+    }
+    
+    takeDamage(amount) {
+        this.health -= amount;
+        createExplosion(this.x, this.y, [200, 100, 255], 3);
+        
+        if (this.health <= 0) {
+            // Small XP and gold reward
+            player.gainXP(2);
+            player.gold += 1;
+        }
+    }
+    
+    display() {
+        push();
+        translate(this.x + screenShake.x, this.y + screenShake.y);
+        
+        fill(this.color);
+        stroke(0);
+        strokeWeight(1);
+        ellipse(0, 0, this.size, this.size);
+        
+        // Minion emoji
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(this.size * 0.6);
+        text("👻", 0, 0);
+        
+        pop();
     }
 }
