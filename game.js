@@ -9,6 +9,8 @@ class Game {
         this.particleSystem = new ParticleSystem();
         this.screenShake = new ScreenShake();
         this.starField = new StarField(150);
+        this.achievementSystem = new AchievementSystem();
+        this.environmentSystem = new EnvironmentSystem();
         
         // Game entities
         this.player = null;
@@ -62,6 +64,114 @@ class Game {
                 apply: (p) => { 
                     p.dashCooldown = Math.max(500, p.dashCooldown - 500); 
                 } 
+            },
+            // New talents
+            { 
+                id: 'piercing_shots', 
+                name: "Piercing Shots", 
+                description: "Projectiles pierce through 2 additional enemies.", 
+                apply: (p) => { 
+                    p.piercingCount = (p.piercingCount || 0) + 2; 
+                } 
+            },
+            { 
+                id: 'spread_shot', 
+                name: "Spread Shot", 
+                description: "Shoot 3 bullets in a spread pattern.", 
+                apply: (p) => { 
+                    p.spreadShot = true; 
+                } 
+            },
+            { 
+                id: 'auto_heal', 
+                name: "Regeneration", 
+                description: "Regenerate 1 health every 5 seconds.", 
+                apply: (p) => { 
+                    p.regenRate = 2000; // Every 2 seconds
+                    p.lastRegenTime = millis();
+                } 
+            },
+            { 
+                id: 'shield', 
+                name: "Energy Shield", 
+                description: "Gain a shield that blocks 3 hits.", 
+                apply: (p) => { 
+                    p.shield = (p.shield || 0) + 3; 
+                    p.maxShield = p.shield; 
+                } 
+            },
+            { 
+                id: 'explosive_rounds', 
+                name: "Explosive Rounds", 
+                description: "Projectiles explode on hit, dealing area damage.", 
+                apply: (p) => { 
+                    p.explosiveShots = true; 
+                } 
+            },
+            { 
+                id: 'multi_shot', 
+                name: "Multi Shot", 
+                description: "Shoot 2 additional projectiles.", 
+                apply: (p) => { 
+                    p.projectileCount = (p.projectileCount || 1) + 2; 
+                } 
+            },
+            { 
+                id: 'vampirism', 
+                name: "Vampirism", 
+                description: "Heal 1 health for each enemy defeated.", 
+                apply: (p) => { 
+                    p.vampiric = true; 
+                } 
+            },
+            { 
+                id: 'gold_magnet', 
+                name: "Gold Magnet", 
+                description: "Attract gold automatically.", 
+                apply: (p) => { 
+                    p.goldMagnet = true; 
+                } 
+            },
+            { 
+                id: 'double_jump', 
+                name: "Double Dash", 
+                description: "Dash distance doubled and faster recharge.", 
+                apply: (p) => { 
+                    p.dashDistance *= 2; 
+                    p.dashCooldown = Math.max(300, p.dashCooldown - 200); 
+                } 
+            },
+            { 
+                id: 'crit_chance', 
+                name: "Critical Strike", 
+                description: "20% chance to deal double damage.", 
+                apply: (p) => { 
+                    p.critChance = (p.critChance || 0) + 0.2; 
+                } 
+            },
+            { 
+                id: 'size_reduction', 
+                name: "Agility Training", 
+                description: "Reduce hitbox size by 20%.", 
+                apply: (p) => { 
+                    p.size *= 0.8; 
+                } 
+            },
+            { 
+                id: 'poison_resistance', 
+                name: "Poison Resistance", 
+                description: "Immune to poison damage.", 
+                apply: (p) => { 
+                    p.poisonImmune = true; 
+                } 
+            },
+            { 
+                id: 'knockback', 
+                name: "Knockback Force", 
+                description: "Projectiles push enemies back.", 
+                apply: (p) => { 
+                    p.knockbackForce = (p.knockbackForce || 0) + 5; 
+                } 
             }
         ];
         
@@ -70,6 +180,24 @@ class Game {
         // Portal system
         this.portalPosition = { x: null, y: null, active: false };
         this.portalSize = 50;
+        
+        // Game statistics for achievements and progression
+        this.totalKills = 0;
+        this.totalPowerUpsCollected = 0;
+        this.totalGoldCollected = 0;
+        this.totalShieldPoints = 0;
+        this.totalExplosions = 0;
+        this.totalCriticalHits = 0;
+        this.totalTalentsSelected = 0;
+        this.bossesDefeated = 0;
+        this.damageFreeWaves = 0;
+        this.elapsedTime = 0;
+        this.recentKills = 0;
+        this.recentKillTimeWindow = 0;
+        this.lastKillTime = 0;
+        this.waveStartTime = 0;
+        this.waveTookDamage = false;
+        this.inWave = false;
     }
     
     initialize() {
@@ -92,8 +220,16 @@ class Game {
     }
     
     update() {
+        // Update elapsed time
+        if (this.gameState.getState() === 'playing') {
+            this.elapsedTime += deltaTime;
+        }
+        
         // Update screen shake
         this.screenShake.update();
+        
+        // Update achievement system
+        this.achievementSystem.update(this);
         
         // Handle different game states
         switch(this.gameState.getState()) {
@@ -117,6 +253,13 @@ class Game {
     }
     
     updatePlaying() {
+        // Track wave start for achievements
+        if (!this.inWave && this.waveManager.getCurrentWave() > 0) {
+            this.inWave = true;
+            this.waveStartTime = millis();
+            this.waveTookDamage = false;
+        }
+        
         // Update player
         this.player.update();
         
@@ -128,6 +271,9 @@ class Game {
         
         // Update wave manager and enemies
         this.waveManager.update(this.enemies, this.player);
+        
+        // Update environment system
+        this.environmentSystem.update(this);
         
         // Update enemies
         for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -141,9 +287,22 @@ class Game {
                     this.player.gainXP(enemy.xpValue);
                     this.player.gold += enemy.goldValue;
                     
+                    // Track gold collection
+                    this.totalGoldCollected += enemy.goldValue;
+                    
                     // Chance to drop powerup
                     if (random() < 0.15) { // 15% chance
                         this.powerUps.push(createRandomPowerUp(enemy.x, enemy.y));
+                    }
+                    
+                    // Track achievements
+                    this.totalKills++;
+                    this.recentKills++;
+                    this.lastKillTime = millis();
+                    
+                    // Check if recent kill window should reset
+                    if (this.recentKillTimeWindow <= 0) {
+                        this.recentKillTimeWindow = 30000; // 30 seconds
                     }
                     
                     // Create death effect
@@ -163,6 +322,8 @@ class Game {
                 // Boss defeated - handled by wave manager
                 this.player.gainXP(boss.xpValue);
                 this.player.gold += boss.goldValue;
+                this.totalKills++;
+                this.bossesDefeated++;
                 this.addExplosion(boss.x, boss.y, [255, 255, 0], 20);
                 this.addScreenShake(15, 30);
             }
@@ -174,12 +335,34 @@ class Game {
             powerUp.update(this.player);
             
             if (powerUp.collected || powerUp.isExpired()) {
+                if (powerUp.collected) {
+                    this.totalPowerUpsCollected++;
+                }
                 this.powerUps.splice(i, 1);
             }
         }
         
         // Handle collisions
         this.handleCollisions();
+        
+        // Check environmental collisions
+        this.environmentSystem.checkCollisions(this);
+        
+        // Update recent kills timer
+        if (this.recentKillTimeWindow > 0) {
+            this.recentKillTimeWindow -= deltaTime;
+            if (this.recentKillTimeWindow <= 0) {
+                this.recentKills = 0;
+            }
+        }
+        
+        // Check for damage-free wave completion
+        if (this.inWave && this.waveManager.isWaveComplete()) {
+            if (!this.waveTookDamage) {
+                this.damageFreeWaves++;
+            }
+            this.inWave = false;
+        }
         
         // Update portal
         this.updatePortal();
@@ -208,8 +391,10 @@ class Game {
             for (let j = this.enemies.length - 1; j >= 0; j--) {
                 let enemy = this.enemies[j];
                 if (checkCircleCollision(projectile, enemy)) {
-                    enemy.takeDamage(projectile.damage);
-                    this.player.projectiles.splice(i, 1);
+                    let removeProjectile = this.handleProjectileCollision(projectile, enemy);
+                    if (removeProjectile) {
+                        this.player.projectiles.splice(i, 1);
+                    }
                     hit = true;
                     break;
                 }
@@ -221,16 +406,20 @@ class Game {
                 
                 // Check boss
                 if (checkCircleCollision(projectile, boss)) {
-                    boss.takeDamage(projectile.damage);
-                    this.player.projectiles.splice(i, 1);
+                    let removeProjectile = this.handleProjectileCollision(projectile, boss);
+                    if (removeProjectile) {
+                        this.player.projectiles.splice(i, 1);
+                    }
                     hit = true;
                 } else {
                     // Check minions
                     for (let k = boss.minions.length - 1; k >= 0; k--) {
                         let minion = boss.minions[k];
                         if (checkCircleCollision(projectile, minion)) {
-                            minion.takeDamage(projectile.damage);
-                            this.player.projectiles.splice(i, 1);
+                            let removeProjectile = this.handleProjectileCollision(projectile, minion);
+                            if (removeProjectile) {
+                                this.player.projectiles.splice(i, 1);
+                            }
                             hit = true;
                             
                             if (minion.isDead()) {
@@ -245,6 +434,99 @@ class Game {
         
         // Enemy projectiles vs player (handled in enemy update methods)
         // PowerUps vs player (handled in powerup update methods)
+    }
+    
+    handleProjectileCollision(projectile, target) {
+        // Calculate damage with critical hits
+        let actualDamage = projectile.damage;
+        if (projectile.isCritical) {
+            actualDamage *= 2; // Double damage on crit
+        }
+        
+        // Apply damage to target
+        target.takeDamage(actualDamage);
+        
+        // Apply knockback if projectile has knockback force
+        if (projectile.knockbackForce && projectile.knockbackForce > 0) {
+            let angle = atan2(target.y - projectile.y, target.x - projectile.x);
+            target.x += cos(angle) * projectile.knockbackForce;
+            target.y += sin(angle) * projectile.knockbackForce;
+        }
+        
+        // Handle special projectile effects
+        if (projectile.type === 'player') {
+            // Player projectile hit enemy
+            if (target.poisonEffect && !this.player.poisonImmune) {
+                // Apply poison effect
+                target.poisoned = true;
+                target.poisonEndTime = millis() + 3000; // 3 seconds
+                target.poisonDamage = 1;
+            }
+            
+            if (projectile.slowEffect) {
+                // Apply slow effect
+                target.slowed = true;
+                target.slowEndTime = millis() + 2000; // 2 seconds
+                target.originalSpeed = target.speed;
+                target.speed *= 0.5; // 50% speed reduction
+            }
+            
+            // Vampiric effect - heal player on kill
+            if (this.player.vampiric || this.player.tempVampiric > 0) {
+                if (target.isDead()) {
+                    this.player.heal(1);
+                }
+            }
+            
+            // Explosive effect
+            if (this.player.explosiveShots && !projectile.exploded) {
+                projectile.exploded = true;
+                this.addExplosion(projectile.x, projectile.y, [255, 150, 0], 10);
+                
+                // Damage enemies in explosion radius
+                let explosionRadius = 60;
+                let explosionDamage = Math.floor(actualDamage * 0.5);
+                
+                // Damage regular enemies
+                for (let enemy of this.enemies) {
+                    if (enemy !== target) {
+                        let distance = dist(projectile.x, projectile.y, enemy.x, enemy.y);
+                        if (distance < explosionRadius) {
+                            enemy.takeDamage(explosionDamage);
+                        }
+                    }
+                }
+                
+                // Damage boss
+                if (this.waveManager.isBossActive()) {
+                    let boss = this.waveManager.getBoss();
+                    if (boss !== target) {
+                        let distance = dist(projectile.x, projectile.y, boss.x, boss.y);
+                        if (distance < explosionRadius) {
+                            boss.takeDamage(explosionDamage);
+                        }
+                    }
+                }
+                
+                this.addScreenShake(8, 15);
+            }
+            
+            // Handle piercing
+            if (projectile.pierceCount > 0) {
+                projectile.pierceCount--;
+                return false; // Don't remove projectile
+            }
+            
+            return true; // Remove projectile on hit
+        } else {
+            // Enemy projectile hit player
+            if (projectile.poisonEffect) {
+                this.player.poisoned = true;
+                this.player.poisonEndTime = millis() + 3000;
+                this.player.poisonDamage = projectile.damage;
+            }
+            return true; // Remove enemy projectile on hit
+        }
     }
     
     updatePortal() {
@@ -287,12 +569,18 @@ class Game {
             case 'shop':
                 this.drawShop();
                 break;
+            case 'achievements':
+                this.achievementSystem.drawAchievementsMenu();
+                break;
         }
         
         pop();
         
         // Draw particles (not affected by screen shake)
         this.particleSystem.display();
+        
+        // Draw achievement notifications (not affected by screen shake)
+        this.achievementSystem.draw();
     }
     
     drawStart() {
@@ -300,6 +588,9 @@ class Game {
     }
     
     drawPlaying() {
+        // Draw environment effects first
+        this.environmentSystem.draw();
+        
         // Draw game entities
         this.player.display();
         
@@ -438,6 +729,7 @@ class Game {
         if (selection >= 0 && selection < this.availableTalents.length) {
             let selectedTalent = this.availableTalents[selection];
             selectedTalent.apply(this.player);
+            this.totalTalentsSelected++; // Track achievements
             console.log(`Applied talent: ${selectedTalent.name}`);
             
             this.gameState.continuePlaying();

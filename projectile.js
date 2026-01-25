@@ -21,6 +21,14 @@ class Projectile {
         // Visual effects
         this.trail = [];
         this.maxTrailLength = 5;
+        
+        // New properties for advanced weapons
+        this.pierceCount = 0; // Number of enemies this projectile can pierce through
+        this.isCritical = false; // Critical hit flag
+        this.knockbackForce = 0; // Knockback force on hit
+        this.exploded = false; // For explosive projectiles
+        this.slowEffect = false; // For time slow projectiles
+        this.poisonEffect = false; // For poison projectiles
     }
 
     update() {

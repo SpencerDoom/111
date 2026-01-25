@@ -133,30 +133,143 @@ function checkCircleCollision(entity1, entity2) {
     return distance < minDistance;
 }
 
-function checkProjectileEnemyCollisions(projectiles, enemies, onHit) {
+function checkProjectileEnemyCollisions(projectiles, enemies, onHit, game) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         let projectile = projectiles[i];
+        let hitTarget = false;
         
         for (let j = enemies.length - 1; j >= 0; j--) {
             let enemy = enemies[j];
             
             if (checkCircleCollision(projectile, enemy)) {
-                // Handle collision
-                enemy.takeDamage(projectile.damage);
-                projectiles.splice(i, 1);
+                // Handle enhanced collision
+                let removeProjectile = handleProjectileCollision(projectile, enemy, game);
+                
+                if (removeProjectile) {
+                    projectiles.splice(i, 1);
+                }
+                hitTarget = true;
                 
                 if (onHit) {
                     onHit(projectile, enemy);
                 }
                 
-                // Check if enemy is dead
-                if (enemy.isDead()) {
-                    enemies.splice(j, 1);
-                }
-                
-                break; // Projectile can only hit one enemy
+                break; // Only process first collision per frame
             }
         }
+        
+        // If no regular enemy was hit, check boss
+        if (!hitTarget && game.waveManager.isBossActive()) {
+            let boss = game.waveManager.getBoss();
+            
+            if (checkCircleCollision(projectile, boss)) {
+                let removeProjectile = handleProjectileCollision(projectile, boss, game);
+                
+                if (removeProjectile) {
+                    projectiles.splice(i, 1);
+                }
+                
+                if (onHit) {
+                    onHit(projectile, boss);
+                }
+                
+                break;
+            }
+        }
+    }
+}
+
+// Enhanced projectile collision handling
+function handleProjectileCollision(projectile, target, game) {
+    // Calculate damage with critical hits
+    let actualDamage = projectile.damage;
+    if (projectile.isCritical) {
+        actualDamage *= 2; // Double damage on crit
+    }
+    
+    // Apply damage to target
+    target.takeDamage(actualDamage);
+    
+    // Apply knockback if projectile has knockback force
+    if (projectile.knockbackForce && projectile.knockbackForce > 0) {
+        let angle = atan2(target.y - projectile.y, target.x - projectile.x);
+        target.x += cos(angle) * projectile.knockbackForce;
+        target.y += sin(angle) * projectile.knockbackForce;
+    }
+    
+    // Handle special projectile effects
+    if (projectile.type === 'player') {
+        // Player projectile hit enemy
+        if (target.poisonEffect && !game.player.poisonImmune) {
+            // Apply poison effect
+            target.poisoned = true;
+            target.poisonEndTime = millis() + 3000; // 3 seconds
+            target.poisonDamage = 1;
+        }
+        
+        if (projectile.slowEffect) {
+            // Apply slow effect
+            target.slowed = true;
+            target.slowEndTime = millis() + 2000; // 2 seconds
+            target.originalSpeed = target.speed;
+            target.speed *= 0.5; // 50% speed reduction
+        }
+        
+        // Vampiric effect - heal player on kill
+        if (game.player.vampiric || game.player.tempVampiric > 0) {
+            if (target.isDead()) {
+                game.player.heal(1);
+            }
+        }
+        
+        // Explosive effect
+        if (game.player.explosiveShots && !projectile.exploded) {
+            projectile.exploded = true;
+            createExplosion(projectile.x, projectile.y, [255, 150, 0], 10);
+            
+            // Damage enemies in explosion radius
+            let explosionRadius = 60;
+            let explosionDamage = Math.floor(actualDamage * 0.5);
+            
+            // Damage regular enemies
+            for (let enemy of game.enemies) {
+                if (enemy !== target) {
+                    let distance = dist(projectile.x, projectile.y, enemy.x, enemy.y);
+                    if (distance < explosionRadius) {
+                        enemy.takeDamage(explosionDamage);
+                    }
+                }
+            }
+            
+            // Damage boss
+            if (game.waveManager.isBossActive()) {
+                let boss = game.waveManager.getBoss();
+                if (boss !== target) {
+                    let distance = dist(projectile.x, projectile.y, boss.x, boss.y);
+                    if (distance < explosionRadius) {
+                        boss.takeDamage(explosionDamage);
+                    }
+                }
+            }
+            
+            game.addScreenShake(8, 15);
+        }
+        
+        // Handle piercing
+        if (projectile.pierceCount > 0) {
+            projectile.pierceCount--;
+            return false; // Don't remove projectile
+        }
+        
+        return true; // Remove projectile on hit
+    } else {
+        // Enemy projectile hit player
+        if (projectile.poisonEffect) {
+            game.player.poisoned = true;
+            game.player.poisonEndTime = millis() + 3000;
+            game.player.poisonDamage = projectile.damage;
+        }
+        return true; // Remove enemy projectile on hit
     }
 }
 
