@@ -357,7 +357,7 @@ class Game {
         }
         
         // Check for damage-free wave completion
-        if (this.inWave && this.waveManager.isWaveComplete()) {
+        if (this.inWave && this.waveManager.isWaveComplete(this.enemies)) {
             if (!this.waveTookDamage) {
                 this.damageFreeWaves++;
             }
