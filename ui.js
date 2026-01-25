@@ -7,7 +7,7 @@ class UIManager {
             warning: [255, 100, 100],
             success: [100, 255, 100],
             gold: [255, 215, 0],
-            text: [255, 255, 255]
+            textColor: [255, 255, 255]
         };
     }
 
@@ -59,11 +59,11 @@ class UIManager {
 
         // Border
         noFill();
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         rect(x, y, barWidth, barHeight);
 
         // Text
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(CENTER, CENTER);
         textSize(12);
         text(`❤️ 生命值 ${player.health}/${player.maxHealth}`, x + barWidth/2, y + barHeight/2);
@@ -84,11 +84,11 @@ class UIManager {
 
         // Border
         noFill();
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         rect(x, y, barWidth, barHeight);
 
         // Text
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(LEFT, CENTER);
         textSize(10);
         text(`⭐ 等级 ${player.level} (${player.xp}/${player.xpToNextLevel})`, x + 5, y + barHeight/2);
@@ -110,11 +110,11 @@ class UIManager {
 
         // Border
         noFill();
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         rect(x, y, barWidth, barHeight);
 
         // Text
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(LEFT, CENTER);
         textSize(8);
         text("⚡ 冲刺", x + 5, y + barHeight/2);
@@ -135,11 +135,11 @@ class UIManager {
 
         // Border
         noFill();
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         rect(x, y, barWidth, barHeight);
 
         // Text
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(LEFT, CENTER);
         textSize(8);
         text(`🛡️ 护盾: ${player.shield}/${player.maxShield}`, x + 5, y + barHeight/2);
@@ -159,7 +159,7 @@ class UIManager {
         if (player.tempGoldMagnet > 0) effects.push({emoji: "🧲", time: player.tempGoldMagnet});
 
         if (effects.length > 0) {
-            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
             textAlign(LEFT, TOP);
             textSize(10);
             text("激活效果:", x, y);
@@ -178,7 +178,7 @@ class UIManager {
         let unlocked = achievementSystem.getUnlockedCount();
         let total = achievementSystem.getTotalCount();
         
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(RIGHT, TOP);
         textSize(12);
         text(`🏆 ${unlocked}/${total}`, x, y);
@@ -198,12 +198,12 @@ class UIManager {
         
         // Border
         noFill();
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         rect(x - barWidth, y + 20, barWidth, barHeight);
     }
 
     drawWaveInfo(waveManager, x, y) {
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(RIGHT, TOP);
         textSize(16);
         text(`波次: ${waveManager.getCurrentWave()}`, x, y);
@@ -221,7 +221,7 @@ class UIManager {
         textSize(14);
         text(`💰 金币: ${Math.floor(player.gold)}`, x, y);
 
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         text(`等级: ${player.level}`, x, y + 20);
     }
 
@@ -245,7 +245,7 @@ class UIManager {
         text("新增4种敌人类型、强化武器和成就系统！", width/2, height/2 - 60);
 
         // Instructions
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textSize(18);
         text("WASD 移动", width/2, height/2 - 30);
         text("鼠标瞄准并点击射击", width/2, height/2);
@@ -275,7 +275,7 @@ class UIManager {
         text("💀 游戏结束 💀", width/2, height/2 - 80);
 
         // Stats
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textSize(18);
         text(`最终等级: ${player.level}`, width/2, height/2 - 30);
         text(`存活波次: ${waveManager.getCurrentWave() - 1}`, width/2, height/2);
@@ -304,7 +304,7 @@ class UIManager {
         text("🎯 升级！🎯", width/2, height/2 - 150);
 
         // Instructions
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textSize(16);
         text("选择一个天赋:", width/2, height/2 - 100);
 
@@ -326,13 +326,13 @@ class UIManager {
             text(`${i + 1}. ${talent.name}`, width/2 - 190, y - 5);
 
             // Talent description
-            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
             textSize(12);
             text(talent.description, width/2 - 190, y + 15);
         }
 
         // Instructions
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(CENTER, CENTER);
         textSize(14);
         text("按 1、2 或 3 选择", width/2, height/2 + 100);
@@ -361,7 +361,7 @@ class UIManager {
         text(`💰 金币: ${Math.floor(player.gold)}    波次: ${currentWave}`, width/2, height/2 - 190);
 
         if (!shopSystem) {
-            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
             textSize(16);
             text("商店系统加载失败", width/2, height/2);
             pop();
@@ -397,7 +397,7 @@ class UIManager {
 
             // Header line
             noStroke();
-            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
             textAlign(LEFT, TOP);
             textSize(18);
             let statusText = "";
@@ -427,7 +427,7 @@ class UIManager {
         );
 
         // Footer instructions
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(CENTER, CENTER);
         textSize(14);
         text("按 1~3 购买 | 按 R 刷新 | 按 ESC 离开", width/2, height - 60);
@@ -497,12 +497,12 @@ class UIManager {
 
         // Border
         noFill();
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         strokeWeight(2);
         rect(x, y, barWidth, barHeight);
 
         // Boss name and phase
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(CENTER, CENTER);
         textSize(14);
         text(`${boss.getBossEmoji()} Boss 阶段 ${boss.phase} ${boss.getBossEmoji()}`, x + barWidth/2, y + barHeight/2);
@@ -519,10 +519,10 @@ class UIManager {
         } else {
             fill(50);
         }
-        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        stroke(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         rect(x, y, w, h);
         
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(CENTER, CENTER);
         textSize(16);
         text(buttonText, x + w/2, y + h/2);
