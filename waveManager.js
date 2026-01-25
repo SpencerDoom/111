@@ -115,18 +115,34 @@ class WaveManager {
     }
 
     completeBossBattle(player) {
+        if (!this.currentBoss) return;
+
+        let defeatedBoss = this.currentBoss;
         this.isBossBattleActive = false;
-        
-        // Boss XP reward
-        player.gainXP(50 + (this.currentWave * 10));
-        
+
+        // Boss rewards
+        player.gainXP(defeatedBoss.xpValue || (50 + (this.currentWave * 10)));
+        player.gold += defeatedBoss.goldValue || 0;
+
+        // Track game-wide stats for achievements/feedback
+        if (typeof game !== 'undefined') {
+            game.totalKills++;
+            game.bossesDefeated++;
+            if (game.addExplosion) {
+                game.addExplosion(defeatedBoss.x, defeatedBoss.y, [255, 255, 0], 20);
+            }
+            if (game.addScreenShake) {
+                game.addScreenShake(15, 30);
+            }
+        }
+
         // Create portal for shop access or next area
         this.createPortal();
-        
+
         // Reset for next set of waves
         this.bossAppearsWave += 3; // Next boss in 3 more waves
         this.currentBoss = null;
-        
+
         console.log(`Boss defeated! Next boss at wave ${this.bossAppearsWave}`);
     }
 

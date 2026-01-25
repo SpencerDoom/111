@@ -110,7 +110,7 @@ class PowerUp extends Item {
                 player.tempDamageBoost = 300; // 5 seconds at 60fps
                 break;
             case 'gold':
-                player.gold += random(5, 15);
+                player.gold += Math.floor(random(5, 15));
                 break;
             case 'xp':
                 player.gainXP(random(10, 25));

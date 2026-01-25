@@ -219,7 +219,7 @@ class UIManager {
         fill(this.colorScheme.gold[0], this.colorScheme.gold[1], this.colorScheme.gold[2]);
         textAlign(RIGHT, TOP);
         textSize(14);
-        text(`💰 金币: ${player.gold}`, x, y);
+        text(`💰 金币: ${Math.floor(player.gold)}`, x, y);
 
         fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
         text(`等级: ${player.level}`, x, y + 20);
@@ -279,7 +279,7 @@ class UIManager {
         textSize(18);
         text(`最终等级: ${player.level}`, width/2, height/2 - 30);
         text(`存活波次: ${waveManager.getCurrentWave() - 1}`, width/2, height/2);
-        text(`收集金币: ${player.gold}`, width/2, height/2 + 30);
+        text(`收集金币: ${Math.floor(player.gold)}`, width/2, height/2 + 30);
 
         // Restart button
         textSize(20);
@@ -341,30 +341,138 @@ class UIManager {
     }
 
     // Shop screen
-    drawShopScreen(player) {
+    drawShopScreen(player, shopSystem, waveManager) {
         push();
 
         // Background overlay
         fill(0, 0, 0, 180);
         rect(0, 0, width, height);
 
+        let currentWave = waveManager && waveManager.getCurrentWave ? waveManager.getCurrentWave() : 1;
+
         // Title
         fill(this.colorScheme.gold[0], this.colorScheme.gold[1], this.colorScheme.gold[2]);
         textAlign(CENTER, CENTER);
         textSize(36);
-        text("🏪 商店 🏪", width/2, height/2 - 150);
+        text("🏪 商店 🏪", width/2, height/2 - 230);
 
-        // Player gold
-        textSize(18);
-        text(`💰 金币: ${player.gold}`, width/2, height/2 - 100);
-
-        // Shop items (placeholder)
-        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        // Player gold & wave
         textSize(16);
-        text("即将推出...", width/2, height/2);
-        text("按 ESC 继续", width/2, height/2 + 50);
+        text(`💰 金币: ${Math.floor(player.gold)}    波次: ${currentWave}`, width/2, height/2 - 190);
+
+        if (!shopSystem) {
+            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            textSize(16);
+            text("商店系统加载失败", width/2, height/2);
+            pop();
+            return;
+        }
+
+        // Items
+        let itemRects = this.getShopItemRects(shopSystem.items.length);
+        for (let i = 0; i < shopSystem.items.length; i++) {
+            let item = shopSystem.items[i];
+            let rectInfo = itemRects[i];
+
+            let canBuy = !item.sold && (!item.canBuy || item.canBuy(player));
+            let affordable = player.gold >= item.price;
+
+            // Box styling
+            fill(40);
+            if (item.sold) {
+                fill(25);
+            } else if (!canBuy || !affordable) {
+                fill(35);
+            }
+
+            if (item.sold) {
+                stroke(120);
+            } else if (canBuy && affordable) {
+                stroke(this.colorScheme.accent[0], this.colorScheme.accent[1], this.colorScheme.accent[2]);
+            } else {
+                stroke(this.colorScheme.warning[0], this.colorScheme.warning[1], this.colorScheme.warning[2]);
+            }
+            strokeWeight(2);
+            rect(rectInfo.x, rectInfo.y, rectInfo.w, rectInfo.h, 8);
+
+            // Header line
+            noStroke();
+            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            textAlign(LEFT, TOP);
+            textSize(18);
+            let statusText = "";
+            if (item.sold) statusText = "(已购买)";
+            else if (!canBuy) statusText = "(不可购买)";
+            else if (!affordable) statusText = "(金币不足)";
+
+            text(`${i + 1}. ${item.emoji} ${item.name}  -  ${item.price}💰 ${statusText}`, rectInfo.x + 16, rectInfo.y + 12);
+
+            // Description
+            textSize(12);
+            fill(210);
+            text(item.description, rectInfo.x + 16, rectInfo.y + 42, rectInfo.w - 32, rectInfo.h - 50);
+        }
+
+        // Reroll button
+        let rerollRect = this.getShopRerollButtonRect();
+        let rerollCost = shopSystem.getRerollCost ? shopSystem.getRerollCost(currentWave) : 0;
+        let canReroll = player.gold >= rerollCost;
+        this.drawButton(
+            rerollRect.x,
+            rerollRect.y,
+            rerollRect.w,
+            rerollRect.h,
+            `R 刷新商品 (-${rerollCost}💰)`,
+            canReroll
+        );
+
+        // Footer instructions
+        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        text("按 1~3 购买 | 按 R 刷新 | 按 ESC 离开", width/2, height - 60);
+
+        // Message
+        if (shopSystem.message) {
+            textSize(14);
+            if (shopSystem.message.includes('成功')) {
+                fill(this.colorScheme.success[0], this.colorScheme.success[1], this.colorScheme.success[2]);
+            } else {
+                fill(this.colorScheme.gold[0], this.colorScheme.gold[1], this.colorScheme.gold[2]);
+            }
+            text(shopSystem.message, width/2, height - 30);
+        }
 
         pop();
+    }
+
+    getShopItemRects(itemCount) {
+        let rects = [];
+        let boxW = 560;
+        let boxH = 90;
+        let gap = 18;
+        let totalH = itemCount * boxH + (itemCount - 1) * gap;
+        let startY = height/2 - totalH/2 - 40;
+        let x = width/2 - boxW/2;
+
+        for (let i = 0; i < itemCount; i++) {
+            rects.push({
+                x,
+                y: startY + i * (boxH + gap),
+                w: boxW,
+                h: boxH
+            });
+        }
+        return rects;
+    }
+
+    getShopRerollButtonRect() {
+        return {
+            x: width/2 - 140,
+            y: height - 110,
+            w: 280,
+            h: 36
+        };
     }
 
     // Boss health bar
