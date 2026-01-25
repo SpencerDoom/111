@@ -149,6 +149,12 @@ class Game {
         this.waveTookDamage = false;
         this.inWave = false;
         this.totalPlayTime = 0;
+        this.elapsedTime = 0;
+        this.bossesDefeated = 0;
+        this.totalShieldPoints = 0;
+        this.totalExplosions = 0;
+        this.totalCriticalHits = 0;
+        this.totalTalentsSelected = 0;
         
         // Time events queue for delayed effects
         this.timeEvents = [];
@@ -159,9 +165,46 @@ class Game {
     }
     
     init() {
-        this.gameState.setState('playing');
+        // Set initial game state to 'start' to show start menu
+        this.gameState.setState('start');
+        
+        // Initialize player
         this.player = new Player(width / 2, height / 2);
+        
+        // Reset all game systems
+        this.waveManager.reset();
         this.starField = new StarField(150);
+        this.environmentSystem.clear();
+        
+        // Clear all entity arrays
+        this.enemies = [];
+        this.powerUps = [];
+        this.soulFragments = [];
+        this.mirrorClones = [];
+        this.auras = [];
+        this.timeEvents = [];
+        
+        // Reset game statistics
+        this.totalPlayTime = 0;
+        this.elapsedTime = 0;
+        this.totalKills = 0;
+        this.recentKills = 0;
+        this.recentKillTimeWindow = 0;
+        this.totalGoldCollected = 0;
+        this.totalPowerUpsCollected = 0;
+        this.damageFreeWaves = 0;
+        this.waveTookDamage = false;
+        this.inWave = false;
+        this.bossesDefeated = 0;
+        this.totalShieldPoints = 0;
+        this.totalExplosions = 0;
+        this.totalCriticalHits = 0;
+        this.totalTalentsSelected = 0;
+        
+        // Reset global effects
+        this.timeStopEndTime = 0;
+        
+        // Reset portal
         this.portal = null;
         this.portalActive = false;
     }
@@ -181,10 +224,7 @@ class Game {
     updateGameplay(deltaTime) {
         // Update total play time
         this.totalPlayTime += deltaTime;
-
-        // Check if time is stopped
-        let timeStopped = millis() < this.timeStopEndTime;
-
+        
         // Update portal timer
         if (this.portalActive) {
             this.portalActive = false; // Reset for next wave
@@ -203,7 +243,7 @@ class Game {
 
         // Update star field
         this.starField.update();
-
+        
         // Update player
         this.player.update();
 
@@ -315,6 +355,9 @@ class Game {
             this.inWave = false;
         }
         
+        // Update achievement system
+        this.achievementSystem.update(this);
+        
         // Update portal
         this.updatePortal();
     }
@@ -420,6 +463,7 @@ class Game {
         // Check for critical hit
         if (projectile.isCritical) {
             damage *= 2;
+            this.totalCriticalHits++; // Track for achievements
             this.player.onCrit(target); // 触发暴击事件
         }
         
@@ -439,6 +483,7 @@ class Game {
         // Check for explosive effect
         if (projectile.explosive && targetDied) {
             this.handleExplosion(projectile.x, projectile.y, damage);
+            this.totalExplosions++; // Track for achievements
         }
         
         // 触发投射物击中事件
@@ -655,7 +700,17 @@ class Game {
         }
         
         let talent = this.player.availableTalents[talentIndex];
+        
+        // Track shield points before applying talent
+        let shieldBefore = this.player.shield || 0;
+        
         talent.apply(this.player);
+        
+        // Track shield points after applying talent
+        let shieldAfter = this.player.shield || 0;
+        if (shieldAfter > shieldBefore) {
+            this.totalShieldPoints += (shieldAfter - shieldBefore);
+        }
         
         this.gameState.changeState('playing');
     }
@@ -663,24 +718,45 @@ class Game {
     // 重启游戏
     restart() {
         this.gameState.changeState('playing');
+        
+        // Initialize player
         this.player = new Player(width / 2, height / 2);
+        
+        // Reset all game systems
+        this.waveManager.reset();
+        this.environmentSystem.clear();
+        
+        // Clear all entity arrays
         this.enemies = [];
         this.powerUps = [];
-        this.waveManager.reset();
+        this.soulFragments = [];
+        this.mirrorClones = [];
+        this.auras = [];
+        this.timeEvents = [];
+        
+        // Reset game statistics
+        this.totalPlayTime = 0;
+        this.elapsedTime = 0;
         this.totalKills = 0;
         this.recentKills = 0;
+        this.recentKillTimeWindow = 0;
         this.totalGoldCollected = 0;
         this.totalPowerUpsCollected = 0;
         this.damageFreeWaves = 0;
         this.waveTookDamage = false;
         this.inWave = false;
-        this.totalPlayTime = 0;
+        this.bossesDefeated = 0;
+        this.totalShieldPoints = 0;
+        this.totalExplosions = 0;
+        this.totalCriticalHits = 0;
+        this.totalTalentsSelected = 0;
         
-        // 重置独立实体
-        this.soulFragments = [];
-        this.mirrorClones = [];
-        this.auras = [];
-        this.timeEvents = [];
+        // Reset global effects
+        this.timeStopEndTime = 0;
+        
+        // Reset portal
+        this.portal = null;
+        this.portalActive = false;
     }
     
     display() {
@@ -734,10 +810,12 @@ class Game {
         }
         
         // Display UI
-        this.uiManager.drawHUD(this.player, this.waveManager);
+        this.uiManager.display(this);
         
         // Display game state overlays
-        if (this.gameState.getState() === 'level_up') {
+        if (this.gameState.getState() === 'start') {
+            this.uiManager.drawStartScreen();
+        } else if (this.gameState.getState() === 'level_up') {
             this.displayLevelUpOverlay();
         } else if (this.gameState.getState() === 'game_over') {
             this.displayGameOverOverlay();
@@ -831,10 +909,16 @@ class Game {
     }
     
     keyPressed(keyValue) {
-        if (this.gameState.getState() === 'level_up') {
+        if (this.gameState.getState() === 'start') {
+            // Start the game on any key press or Enter
+            if (keyValue === 'Enter' || keyValue === ' ') {
+                this.startGame();
+            }
+        } else if (this.gameState.getState() === 'level_up') {
             if (keyValue === '1' || keyValue === '2' || keyValue === '3') {
                 let talentIndex = parseInt(keyValue, 10) - 1;
                 this.chooseTalent(talentIndex);
+                this.totalTalentsSelected++; // Track for achievements
             }
         } else if (this.gameState.getState() === 'game_over') {
             if (keyValue === 'r' || keyValue === 'R') {
@@ -851,6 +935,18 @@ class Game {
                 this.gameState.changeState('shop');
                 this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
             }
+        }
+    }
+    
+    startGame() {
+        this.gameState.changeState('playing');
+        // Mark the start of the wave
+        this.inWave = true;
+    }
+    
+    mousePressed() {
+        if (this.gameState.getState() === 'start') {
+            this.startGame();
         }
     }
 }
