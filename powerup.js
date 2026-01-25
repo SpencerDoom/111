@@ -1,5 +1,4 @@
-// Item pickup + item definition system (Isaac-like)
-
+// 完全重构的道具系统 - 20种复杂机制道具
 const ITEM_RARITIES = {
     common: {
         id: 'common',
@@ -24,14 +23,6 @@ const ITEM_RARITIES = {
         color: [255, 215, 0],
         shopPriceMin: 200,
         shopPriceMax: 280
-    },
-    boss: {
-        id: 'boss',
-        name: 'Boss',
-        tier: 4,
-        color: [255, 80, 80],
-        shopPriceMin: 0,
-        shopPriceMax: 0
     }
 };
 
@@ -47,422 +38,614 @@ function safeGetGame() {
     return typeof game !== 'undefined' ? game : null;
 }
 
-function killAllRegularEnemies(gameInstance, { withEffects = true } = {}) {
-    if (!gameInstance || !Array.isArray(gameInstance.enemies)) return;
-
-    for (let i = gameInstance.enemies.length - 1; i >= 0; i--) {
-        let enemy = gameInstance.enemies[i];
-        if (enemy && typeof enemy.takeDamage === 'function') {
-            if (withEffects && gameInstance.addExplosion) {
-                gameInstance.addExplosion(enemy.x, enemy.y, [255, 120, 120], 5);
-            }
-            enemy.takeDamage(99999);
-        }
-    }
-}
-
-function forEachEnemyInRadius(gameInstance, x, y, radius, cb) {
-    if (!gameInstance || !Array.isArray(gameInstance.enemies)) return;
-
-    for (let enemy of gameInstance.enemies) {
-        if (!enemy || typeof enemy.isDead !== 'function' || enemy.isDead()) continue;
-        if (dist(x, y, enemy.x, enemy.y) <= radius) {
-            cb(enemy);
-        }
-    }
-}
-
-class FamiliarDrone {
-    constructor({ orbitRadius = 45, orbitSpeed = 0.04, fireCooldown = 800, damageScale = 0.6 } = {}) {
-        this.orbitRadius = orbitRadius;
-        this.orbitSpeed = orbitSpeed;
-        this.fireCooldown = fireCooldown;
-        this.damageScale = damageScale;
-
+// 独立实体类
+class SoulFragment {
+    constructor(player, gameInstance) {
+        this.player = player;
+        this.game = gameInstance;
+        this.x = player.x;
+        this.y = player.y;
+        this.size = 20;
+        this.damage = Math.floor(player.projectileDamage * 0.5);
         this.angle = random(0, TWO_PI);
+        this.orbitRadius = 40;
+        this.orbitSpeed = 0.03;
         this.lastShotTime = 0;
-        this.x = 0;
-        this.y = 0;
+        this.fireCooldown = 1200;
+        this.followDelay = 0.1;
+        this.targetX = player.x;
+        this.targetY = player.y;
+        this.active = true;
+        this.lifespan = 8000; // 8秒
+        this.spawnTime = millis();
     }
 
-    update(player) {
+    update() {
+        if (!this.active) return;
+
+        // 更新轨道角度
         this.angle += this.orbitSpeed;
-        this.x = player.x + cos(this.angle) * this.orbitRadius;
-        this.y = player.y + sin(this.angle) * this.orbitRadius;
+        
+        // 更新目标位置（带延迟跟随）
+        let desiredX = this.player.x + cos(this.angle) * this.orbitRadius;
+        let desiredY = this.player.y + sin(this.angle) * this.orbitRadius;
+        
+        this.targetX += (desiredX - this.targetX) * this.followDelay;
+        this.targetY += (desiredY - this.targetY) * this.followDelay;
+        
+        this.x = this.targetX;
+        this.y = this.targetY;
 
-        let gameInstance = safeGetGame();
-        if (!gameInstance) return;
+        // 检查生命周期
+        if (millis() - this.spawnTime > this.lifespan) {
+            this.active = false;
+            return;
+        }
 
-        if (millis() - this.lastShotTime < this.fireCooldown) return;
+        // 自动攻击
+        if (millis() - this.lastShotTime > this.fireCooldown) {
+            this.autoAttack();
+        }
+    }
 
-        let target = null;
-        let bestDist = Infinity;
-        for (let enemy of gameInstance.enemies) {
-            if (!enemy || (typeof enemy.isDead === 'function' && enemy.isDead())) continue;
+    autoAttack() {
+        if (!this.game || !this.game.enemies) return;
+
+        // 寻找最近敌人
+        let nearestEnemy = null;
+        let nearestDist = Infinity;
+        
+        for (let enemy of this.game.enemies) {
+            if (enemy.isDead()) continue;
             let d = dist(this.x, this.y, enemy.x, enemy.y);
-            if (d < bestDist) {
-                bestDist = d;
-                target = enemy;
+            if (d < nearestDist && d < 200) {
+                nearestDist = d;
+                nearestEnemy = enemy;
             }
         }
 
-        if (!target && gameInstance.waveManager && gameInstance.waveManager.isBossActive()) {
-            target = gameInstance.waveManager.getBoss();
-            bestDist = dist(this.x, this.y, target.x, target.y);
+        if (nearestEnemy) {
+            let angle = atan2(nearestEnemy.y - this.y, nearestEnemy.x - this.x);
+            let projectile = new Projectile(this.x, this.y, angle, 'player', this.damage, color(150, 100, 255), 6, 4);
+            projectile.isSoulFragment = true;
+            this.game.player.projectiles.push(projectile);
+            this.lastShotTime = millis();
         }
-
-        if (!target || bestDist > 420) return;
-
-        let angle = atan2(target.y - this.y, target.x - this.x);
-        let damage = Math.max(1, Math.floor(player.projectileDamage * this.damageScale));
-        let projectile = new Projectile(this.x, this.y, angle, 'player', damage, color(180, 255, 220), 7, 5);
-        projectile.pierceCount = 0;
-        player.projectiles.push(projectile);
-
-        this.lastShotTime = millis();
     }
 
     display() {
+        if (!this.active) return;
+        
+        let age = millis() - this.spawnTime;
+        let alpha = map(age, 0, this.lifespan, 255, 100);
+        
         push();
         translate(this.x, this.y);
-        fill(180, 255, 220);
-        stroke(0);
-        strokeWeight(1);
-        ellipse(0, 0, 16, 16);
-        fill(255);
+        fill(150, 100, 255, alpha);
+        stroke(255, 255, 255, alpha);
+        strokeWeight(2);
+        ellipse(0, 0, this.size, this.size);
+        fill(255, 255, 255, alpha);
         noStroke();
         textAlign(CENTER, CENTER);
-        textSize(12);
-        text('🛰️', 0, 0);
+        textSize(this.size * 0.6);
+        text('👻', 0, 0);
         pop();
     }
 }
 
+class MirrorClone {
+    constructor(player, gameInstance) {
+        this.player = player;
+        this.game = gameInstance;
+        this.x = player.x + random(-50, 50);
+        this.y = player.y + random(-50, 50);
+        this.size = 25;
+        this.damage = Math.floor(player.projectileDamage * 0.75);
+        this.health = Math.max(5, Math.floor(player.maxHealth * 0.3));
+        this.maxHealth = this.health;
+        this.lastShotTime = 0;
+        this.fireCooldown = player.shotCooldown + 100; // 稍微慢一点
+        this.targetX = player.x;
+        this.targetY = player.y;
+        this.followDelay = 0.05;
+        this.active = true;
+        this.syncDelay = 0;
+    }
+
+    update() {
+        if (!this.active) return;
+
+        // 同步射击延迟
+        this.syncDelay++;
+        if (this.syncDelay >= 3) { // 每3帧同步一次射击
+            this.syncDelay = 0;
+            this.syncShooting();
+        }
+
+        // 跟随玩家（带延迟）
+        let desiredX = this.player.x + random(-30, 30);
+        let desiredY = this.player.y + random(-30, 30);
+        
+        this.targetX += (desiredX - this.targetX) * this.followDelay;
+        this.targetY += (desiredY - this.targetY) * this.followDelay;
+        
+        this.x = this.targetX;
+        this.y = this.targetY;
+
+        // 生命值检查
+        if (this.health <= 0) {
+            this.active = false;
+        }
+    }
+
+    syncShooting() {
+        if (!this.game || !this.game.enemies) return;
+        if (millis() - this.lastShotTime < this.fireCooldown) return;
+
+        // 寻找目标
+        let nearestEnemy = null;
+        let nearestDist = Infinity;
+        
+        for (let enemy of this.game.enemies) {
+            if (enemy.isDead()) continue;
+            let d = dist(this.x, this.y, enemy.x, enemy.y);
+            if (d < nearestDist) {
+                nearestDist = d;
+                nearestEnemy = enemy;
+            }
+        }
+
+        if (nearestEnemy && nearestDist < 300) {
+            let angle = atan2(nearestEnemy.y - this.y, nearestEnemy.x - this.x);
+            let projectile = new Projectile(this.x, this.y, angle, 'player', this.damage, color(100, 255, 150), 7, 5);
+            projectile.isMirrorClone = true;
+            this.game.player.projectiles.push(projectile);
+            this.lastShotTime = millis();
+        }
+    }
+
+    takeDamage(amount) {
+        this.health -= amount;
+    }
+
+    display() {
+        if (!this.active) return;
+        
+        let healthPercent = this.health / this.maxHealth;
+        let colorValue = map(healthPercent, 0, 1, 100, 255);
+        
+        push();
+        translate(this.x, this.y);
+        fill(100, colorValue, 150);
+        stroke(255);
+        strokeWeight(2);
+        ellipse(0, 0, this.size, this.size);
+        
+        // 血条
+        fill(255, 0, 0);
+        noStroke();
+        rect(-this.size/2, -this.size/2 - 8, this.size, 4);
+        fill(0, 255, 0);
+        rect(-this.size/2, -this.size/2 - 8, this.size * healthPercent, 4);
+        
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(this.size * 0.7);
+        text('👤', 0, 0);
+        pop();
+    }
+}
+
+// 20种新道具定义
 const ITEM_DEFS = [
+    // 分裂与弹幕系统（3种）
     {
-        id: 'caffeine_rush',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '☕',
-        name: '咖啡因冲刺',
-        description: '移动速度 +0.4，射击冷却 -25ms（最低 80ms）。',
-        unique: false,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.maxSpeed += 0.4;
-            p.acceleration += 0.03;
-            p.shotCooldown = Math.max(80, p.shotCooldown - 25);
-        }
-    },
-    {
-        id: 'heart_container',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '💖',
-        name: '心之容器',
-        description: '最大生命值 +2，并立刻回复 2 点生命。',
-        unique: false,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.maxHealth += 2;
-            p.health = Math.min(p.maxHealth, p.health + 2);
-        }
-    },
-    {
-        id: 'safety_shield',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '🛡️',
-        name: '安全护盾',
-        description: '获得 2 点护盾（可叠加）。',
-        unique: false,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.shield = (p.shield || 0) + 2;
-            p.maxShield = (p.maxShield || 0) + 2;
-        }
-    },
-    {
-        id: 'needle_tip',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '🪡',
-        name: '针尖',
-        description: '投射物穿透 +1。',
-        unique: false,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.piercingCount = (p.piercingCount || 0) + 1;
-        }
-    },
-    {
-        id: 'spike_knuckles',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '🥊',
-        name: '尖刺拳套',
-        description: '击退力 +8。',
-        unique: false,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.knockbackForce = (p.knockbackForce || 0) + 8;
-        }
-    },
-    {
-        id: 'sprout_of_regen',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '🌿',
-        name: '再生芽',
-        description: '获得再生：每 2.5 秒回复 1 点生命。',
-        unique: true,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.regenRate = Math.min(p.regenRate || Infinity, 2500);
-            p.lastRegenTime = millis();
-        }
-    },
-    {
-        id: 'spread_rune',
-        type: 'passive',
-        rarity: 'common',
-        emoji: '🌀',
-        name: '散射符文',
-        description: '获得散射（3 连发）。',
-        unique: true,
-        shop: true,
-        boss: false,
-        apply: (p) => {
-            p.spreadShot = true;
-        }
-    },
-    {
-        id: 'crystal_focus',
+        id: 'split_barrage',
         type: 'passive',
         rarity: 'rare',
-        emoji: '🔮',
-        name: '水晶专注',
-        description: '暴击率 +15%，投射物伤害 +1。',
+        emoji: '⚡',
+        name: '分裂弹幕',
+        description: '子弹击中敌人时分裂成2-3发小弹幕（伤害60%，最多3层）。',
         unique: true,
         shop: true,
-        boss: true,
-        apply: (p) => {
-            p.critChance = (p.critChance || 0) + 0.15;
-            p.projectileDamage += 1;
+        tags: ['mechanic_split'],
+        apply: (player, game) => {
+            player.hasSplitBarrage = true;
+        },
+        onProjectileHit: (player, projectile, enemy, game) => {
+            if (projectile.splitLevel >= 3) return;
+            
+            let splitCount = Math.floor(random(2, 4));
+            let splitDamage = Math.floor(projectile.damage * 0.6);
+            
+            for (let i = 0; i < splitCount; i++) {
+                let angle = random(0, TWO_PI);
+                let newProjectile = new Projectile(
+                    enemy.x, enemy.y, angle, 'player', 
+                    splitDamage, projectile.color, projectile.size * 0.7, projectile.speed * 0.8
+                );
+                newProjectile.splitLevel = (projectile.splitLevel || 0) + 1;
+                newProjectile.pierceCount = Math.max(0, (projectile.pierceCount || 0) - 1);
+                game.player.projectiles.push(newProjectile);
+            }
         }
     },
     {
-        id: 'explosive_gel',
+        id: 'echo_gun',
         type: 'passive',
         rarity: 'rare',
-        emoji: '💥',
-        name: '爆炸凝胶',
-        description: '获得爆炸弹：投射物命中会造成范围伤害。',
+        emoji: '🔄',
+        name: '回声枪',
+        description: '子弹命中敌人后在原击中位置再发射一次相同伤害的弹幕。',
         unique: true,
         shop: true,
-        boss: true,
-        apply: (p) => {
-            p.explosiveShots = true;
+        tags: ['mechanic_echo'],
+        apply: (player, game) => {
+            player.hasEchoGun = true;
+        },
+        onProjectileHit: (player, projectile, enemy, game) => {
+            setTimeout(() => {
+                if (!enemy.isDead()) {
+                    let angle = atan2(enemy.y - projectile.y, enemy.x - projectile.x);
+                    let echoProjectile = new Projectile(
+                        projectile.x, projectile.y, angle, 'player', 
+                        projectile.damage, color(200, 200, 255), projectile.size, projectile.speed
+                    );
+                    game.player.projectiles.push(echoProjectile);
+                }
+            }, 300); // 300ms延迟
         }
     },
     {
-        id: 'double_barrel',
-        type: 'passive',
-        rarity: 'rare',
-        emoji: '🔱',
-        name: '双管扩容',
-        description: '每次射击额外 +1 发子弹，但射击冷却 +20ms。',
-        unique: false,
+        id: 'soul_fragments',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '👻',
+        name: '灵魂碎片',
+        description: '主动：释放5个跟随你的灵魂，持续8秒自动攻击。冷却45秒。',
+        unique: true,
         shop: true,
-        boss: true,
-        apply: (p) => {
-            p.projectileCount = (p.projectileCount || 1) + 1;
-            p.shotCooldown += 20;
+        tags: ['mechanic_soul'],
+        cooldownMs: 45000,
+        onUse: (player, game) => {
+            for (let i = 0; i < 5; i++) {
+                let soul = new SoulFragment(player, game);
+                game.soulFragments.push(soul);
+            }
+        }
+    },
+
+    // 能量转换系统（3种）
+    {
+        id: 'cursed_gold',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '🪙',
+        name: '诅咒金币',
+        description: '金币转换为伤害：每收集10金币自动转为+1伤害。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_conversion'],
+        apply: (player, game) => {
+            player.hasCursedGold = true;
+            player.goldToDamageConversion = 10;
+        },
+        onGoldCollected: (player, amount, game) => {
+            let totalGold = player.totalGoldCollected || 0;
+            let damageBonus = Math.floor(totalGold / player.goldToDamageConversion);
+            player.projectileDamage = player.baseProjectileDamage + damageBonus;
         }
     },
     {
-        id: 'blood_contract',
+        id: 'soul_contract',
         type: 'passive',
-        rarity: 'rare',
+        rarity: 'legendary',
         emoji: '📜',
-        name: '血之契约',
-        description: '投射物伤害 +2，但最大生命值 -2。',
+        name: '灵魂契约',
+        description: '每次击杀敌人消耗1点生命值，但伤害提升30%。',
         unique: true,
         shop: true,
-        boss: true,
-        apply: (p) => {
-            p.projectileDamage += 2;
-            p.maxHealth = Math.max(2, p.maxHealth - 2);
-            p.health = Math.min(p.health, p.maxHealth);
-        }
-    },
-    {
-        id: 'metamorphosis_pill',
-        type: 'special',
-        rarity: 'rare',
-        emoji: '💊',
-        name: '变形药丸',
-        description: '变得更小更快：体积 -20%，移动速度 +0.8。',
-        unique: true,
-        shop: true,
-        boss: true,
-        apply: (p) => {
-            p.size *= 0.8;
-            p.maxSpeed += 0.8;
-            p.acceleration += 0.05;
-        }
-    },
-
-    {
-        id: 'shockwave_emitter',
-        type: 'active',
-        rarity: 'rare',
-        emoji: '🌊',
-        name: '震荡发射器',
-        description: '主动：释放能量波，击退并伤害附近敌人。冷却 10 秒。',
-        unique: true,
-        shop: true,
-        boss: true,
-        cooldownMs: 10000,
-        onUse: (p, g) => {
-            let radius = 140;
-            let dmg = 5 + Math.floor(p.projectileDamage * 0.5);
-
-            forEachEnemyInRadius(g, p.x, p.y, radius, (enemy) => {
-                enemy.takeDamage(dmg);
-                let a = atan2(enemy.y - p.y, enemy.x - p.x);
-                enemy.x += cos(a) * 18;
-                enemy.y += sin(a) * 18;
-            });
-
-            if (g.waveManager && g.waveManager.isBossActive()) {
-                let boss = g.waveManager.getBoss();
-                if (boss && dist(p.x, p.y, boss.x, boss.y) <= radius) {
-                    boss.takeDamage(Math.floor(dmg * 0.6));
-                }
+        tags: ['mechanic_contract'],
+        apply: (player, game) => {
+            player.hasSoulContract = true;
+            player.damageMultiplier *= 1.3;
+        },
+        onKill: (player, enemy, game) => {
+            if (player.health > 1) {
+                player.health -= 1;
             }
-
-            g.addExplosion(p.x, p.y, [120, 200, 255], 18);
-            g.addScreenShake(10, 12);
         }
     },
-
     {
-        id: 'guardian_orb',
+        id: 'eternal_ring',
         type: 'passive',
-        rarity: 'legendary',
-        emoji: '🛰️',
-        name: '守卫星球',
-        description: '获得一个护卫无人机：环绕你并自动射击。',
-        unique: false,
-        shop: true,
-        boss: true,
-        apply: (p) => {
-            p.familiars = p.familiars || [];
-            p.familiars.push(new FamiliarDrone({ orbitRadius: 50 + p.familiars.length * 8 }));
-        }
-    },
-    {
-        id: 'halo_matrix',
-        type: 'passive',
-        rarity: 'legendary',
-        emoji: '😇',
-        name: '光环矩阵',
-        description: '最大生命值 +4，获得 4 点护盾。',
+        rarity: 'rare',
+        emoji: '💍',
+        name: '永恒之环',
+        description: '每拥有5个主动获取的道具，增加一个光环效果（范围伤害）。',
         unique: true,
         shop: true,
-        boss: true,
-        apply: (p) => {
-            p.maxHealth += 4;
-            p.health = Math.min(p.maxHealth, p.health + 4);
-            p.shield = (p.shield || 0) + 4;
-            p.maxShield = (p.maxShield || 0) + 4;
-        }
-    },
-    {
-        id: 'panic_button',
-        type: 'active',
-        rarity: 'legendary',
-        emoji: '🚨',
-        name: '紧急按钮',
-        description: '主动：清空屏幕上的普通敌人并获得 2 秒无敌。冷却 18 秒。',
-        unique: true,
-        shop: true,
-        boss: true,
-        cooldownMs: 18000,
-        onUse: (p, g) => {
-            killAllRegularEnemies(g, { withEffects: true });
-            p.invulnerableTime = Math.max(p.invulnerableTime || 0, 2000);
-            g.addScreenShake(12, 18);
-        }
-    },
-    {
-        id: 'chrono_stopwatch',
-        type: 'active',
-        rarity: 'legendary',
-        emoji: '⏳',
-        name: '时间秒表',
-        description: '主动：时间暂停 4 秒。冷却 25 秒。',
-        unique: true,
-        shop: true,
-        boss: true,
-        cooldownMs: 25000,
-        onUse: (p, g) => {
-            g.timeStopEndTime = Math.max(g.timeStopEndTime || 0, millis() + 4000);
-            g.addExplosion(p.x, p.y, [150, 150, 255], 12);
+        tags: ['mechanic_accumulation'],
+        apply: (player, game) => {
+            player.hasEternalRing = true;
+            player.updateAuras();
         }
     },
 
-    // Boss-only items (stronger than shop pool)
+    // 条件触发型道具（4种）
     {
-        id: 'crown_of_the_overlord',
+        id: 'crit_heal',
         type: 'passive',
-        rarity: 'boss',
-        emoji: '👑',
-        name: '支配者王冠',
-        description: 'Boss遗物：伤害 +2，额外子弹 +1，穿透 +2，暴击率 +15%。',
+        rarity: 'rare',
+        emoji: '💖',
+        name: '致命一击回血',
+        description: '每次暴击时恢复2点生命值。',
         unique: true,
-        shop: false,
-        boss: true,
-        apply: (p) => {
-            p.projectileDamage += 2;
-            p.projectileCount = (p.projectileCount || 1) + 1;
-            p.piercingCount = (p.piercingCount || 0) + 2;
-            p.critChance = (p.critChance || 0) + 0.15;
+        shop: true,
+        tags: ['mechanic_trigger'],
+        apply: (player, game) => {
+            player.hasCritHeal = true;
+        },
+        onCrit: (player, enemy, game) => {
+            player.heal(2);
         }
     },
     {
-        id: 'void_reactor',
-        type: 'active',
-        rarity: 'boss',
-        emoji: '🕳️',
-        name: '虚空反应堆',
-        description: 'Boss遗物：释放虚空爆破，重创Boss并清空周围敌人。冷却 30 秒。',
+        id: 'combo_reward',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '🔥',
+        name: '连击奖励',
+        description: '15秒内击杀3个敌人时临时触发+50%伤害，持续8秒。',
         unique: true,
-        shop: false,
-        boss: true,
-        cooldownMs: 30000,
-        onUse: (p, g) => {
-            let radius = 240;
-            forEachEnemyInRadius(g, p.x, p.y, radius, (enemy) => {
-                enemy.takeDamage(99999);
-            });
-
-            if (g.waveManager && g.waveManager.isBossActive()) {
-                let boss = g.waveManager.getBoss();
-                if (boss) {
-                    boss.takeDamage(18 + Math.floor(p.projectileDamage * 2));
-                }
+        shop: true,
+        tags: ['mechanic_combo'],
+        apply: (player, game) => {
+            player.hasComboReward = true;
+            player.comboCount = 0;
+            player.lastComboTime = 0;
+            player.comboBonusTime = 0;
+        },
+        onKill: (player, enemy, game) => {
+            let now = millis();
+            if (now - player.lastComboTime > 15000) {
+                player.comboCount = 0;
             }
+            
+            player.comboCount++;
+            player.lastComboTime = now;
+            
+            if (player.comboCount >= 3) {
+                player.comboBonusTime = 8000; // 8秒
+                player.comboCount = 0; // 重置连击
+            }
+        }
+    },
+    {
+        id: 'danger_frenzy',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '⚔️',
+        name: '濒危狂化',
+        description: '生命值低于30%时伤害翻倍，移动速度+30%。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_threshold'],
+        apply: (player, game) => {
+            player.hasDangerFrenzy = true;
+        }
+    },
+    {
+        id: 'revenge_heart',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '💢',
+        name: '复仇之心',
+        description: '受到伤害后，下一发子弹造成双倍伤害。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_revenge'],
+        apply: (player, game) => {
+            player.hasRevengeHeart = true;
+            player.revengeReady = false;
+        },
+        onDamage: (player, damage, game) => {
+            player.revengeReady = true;
+        }
+    },
 
-            g.addExplosion(p.x, p.y, [140, 0, 255], 28);
-            g.addScreenShake(18, 24);
+    // 反弹与防御系统（3种）
+    {
+        id: 'energy_reflect',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '⚡',
+        name: '能量反弹',
+        description: '敌人投射物有30%概率被玩家周围形成的力场反弹。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_reflect'],
+        apply: (player, game) => {
+            player.hasEnergyReflect = true;
+            player.reflectChance = 0.3;
+        }
+    },
+    {
+        id: 'shield_reflect',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '🛡️',
+        name: '护盾反射',
+        description: '主动：启动5秒护盾，期间敌人投射物全部反弹回去。冷却60秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_shield'],
+        cooldownMs: 60000,
+        onUse: (player, game) => {
+            player.reflectAllTime = 5000; // 5秒
+            player.shieldReflectActive = true;
+        }
+    },
+    {
+        id: 'spike_body',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '🌵',
+        name: '钉刺护体',
+        description: '敌人碰撞玩家时反伤敌人2点伤害。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_spike'],
+        apply: (player, game) => {
+            player.hasSpikeBody = true;
+            player.spikeDamage = 2;
+        }
+    },
+
+    // 变身与模式切换（2种）
+    {
+        id: 'turret_mode',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '🏰',
+        name: '炮台模式',
+        description: '主动：切换炮台模式（移动速度0，伤害翻倍，射速翻倍）。按T键切换。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_mode'],
+        cooldownMs: 0,
+        onUse: (player, game) => {
+            player.turretMode = !player.turretMode;
+            if (player.turretMode) {
+                player.originalSpeed = player.maxSpeed;
+                player.originalAccel = player.acceleration;
+                player.maxSpeed = 0;
+                player.acceleration = 0;
+                player.projectileDamage *= 2;
+                player.shotCooldown = Math.max(50, player.shotCooldown / 2);
+            } else {
+                player.maxSpeed = player.originalSpeed;
+                player.acceleration = player.originalAccel;
+                player.projectileDamage = Math.floor(player.projectileDamage / 2);
+                player.shotCooldown = Math.min(500, player.shotCooldown * 2);
+            }
+        }
+    },
+    {
+        id: 'whip_weapon',
+        type: 'passive',
+        rarity: 'legendary',
+        emoji: '🐍',
+        name: '鞭子武器',
+        description: '改变射击方式为近战鞭子：范围150像素，伤害+30%，可穿透敌人。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_weapon'],
+        apply: (player, game) => {
+            player.hasWhipWeapon = true;
+            player.whipRange = 150;
+            player.whipDamage = Math.floor(player.projectileDamage * 1.3);
+        }
+    },
+
+    // 叠加与组合效应（2种）
+    {
+        id: 'four_elements',
+        type: 'passive',
+        rarity: 'legendary',
+        emoji: '🌟',
+        name: '四元素碰撞',
+        description: '若同时拥有4个不同元素相关道具，触发额外效果（每秒能量波）。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_combo', 'element_fire', 'element_ice', 'element_lightning', 'element_earth'],
+        apply: (player, game) => {
+            player.hasFourElements = true;
+        }
+    },
+    {
+        id: 'infinite_shop',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '🏪',
+        name: '无穷商城',
+        description: '商店每次刷新金币消耗降低5%，累积可达最低3金币。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_progressive'],
+        apply: (player, game) => {
+            player.hasInfiniteShop = true;
+            player.shopDiscount = 0.95; // 5%折扣
+        }
+    },
+
+    // 概率与运气系统（2种）
+    {
+        id: 'lucky_rune',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '🍀',
+        name: '幸运符文',
+        description: '25%概率在击杀敌人时临时获得随机buff（+伤害/+速度/+火速之一），持续12秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_luck'],
+        apply: (player, game) => {
+            player.hasLuckyRune = true;
+            player.activeBuffs = [];
+        },
+        onKill: (player, enemy, game) => {
+            if (Math.random() < 0.25) {
+                let buffType = Math.floor(Math.random() * 3);
+                let buff = {
+                    type: buffType,
+                    duration: 12000, // 12秒
+                    startTime: millis()
+                };
+                player.activeBuffs.push(buff);
+            }
+        }
+    },
+    {
+        id: 'gambler_dice',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '🎲',
+        name: '赌徒的骰子',
+        description: '主动：50%翻倍下一波敌人的金币掉落，50%清空当前掉落物品。冷却90秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_gamble'],
+        cooldownMs: 90000,
+        onUse: (player, game) => {
+            player.gambling = !player.gambling;
+            if (Math.random() < 0.5) {
+                player.nextWaveDoubleGold = true;
+            } else {
+                player.clearNextWaveDrops = true;
+            }
+        }
+    },
+
+    // 跟随与分身系统（1种）
+    {
+        id: 'mirror_clone',
+        type: 'passive',
+        rarity: 'legendary',
+        emoji: '👥',
+        name: '分身镜像',
+        description: '创建一个跟随玩家的分身，同步射击（伤害75%）。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_clone'],
+        apply: (player, game) => {
+            player.hasMirrorClone = true;
+            if (!player.mirrorClone || !player.mirrorClone.active) {
+                player.mirrorClone = new MirrorClone(player, game);
+                game.mirrorClones.push(player.mirrorClone);
+            }
         }
     }
 ];
@@ -496,7 +679,6 @@ function equipActiveItem(player, itemDef, gameInstance, { dropPrevious = true } 
     };
 
     if (dropPrevious && old && gameInstance) {
-        // Drop the previous active item near the player so it can be swapped like Isaac.
         let dropX = player.x + random(-20, 20);
         let dropY = player.y + random(-20, 20);
         gameInstance.powerUps.push(createItemPickup(dropX, dropY, old.id));
@@ -514,7 +696,7 @@ function grantItemToPlayer(player, itemId, gameInstance = null) {
 
     // Passive / special
     if (def.unique && playerHasItem(player, def.id)) {
-        // Duplicate uniques: convert into a small gold refund (simple interaction rule)
+        // Duplicate uniques: convert into a small gold refund
         player.gold = (player.gold || 0) + 15;
         return false;
     }
@@ -524,6 +706,23 @@ function grantItemToPlayer(player, itemId, gameInstance = null) {
 
     if (typeof def.apply === 'function') {
         def.apply(player, gameInstance);
+    }
+
+    // 注册事件监听器
+    if (def.onKill) {
+        player.addEventListener('onKill', (enemy) => def.onKill(player, enemy, gameInstance));
+    }
+    if (def.onCrit) {
+        player.addEventListener('onCrit', (enemy) => def.onCrit(player, enemy, gameInstance));
+    }
+    if (def.onDamage) {
+        player.addEventListener('onDamage', (damage) => def.onDamage(player, damage, gameInstance));
+    }
+    if (def.onGoldCollected) {
+        player.addEventListener('onGoldCollected', (amount) => def.onGoldCollected(player, amount, gameInstance));
+    }
+    if (def.onProjectileHit) {
+        player.addEventListener('onProjectileHit', (projectile, enemy) => def.onProjectileHit(player, projectile, enemy, gameInstance));
     }
 
     return true;
@@ -540,21 +739,6 @@ function getShopPool(currentWave = 1) {
         if (tier === 2) weight = 0.35 + wave * 0.03;
         if (tier === 3) weight = 0.08 + wave * 0.012;
         weight = clampNumber(weight, 0.02, 1.2);
-
-        return { def, weight };
-    });
-}
-
-function getBossPool(currentWave = 1) {
-    let wave = currentWave || 1;
-    return ITEM_DEFS.filter(d => d.boss).map(def => {
-        let tier = getRarityDef(def.rarity).tier;
-
-        let weight = 1;
-        if (tier === 2) weight = 1;
-        if (tier === 3) weight = 0.8 + wave * 0.05;
-        if (tier === 4) weight = 0.35 + wave * 0.06;
-        weight = clampNumber(weight, 0.05, 2.0);
 
         return { def, weight };
     });
@@ -590,35 +774,6 @@ function rollShopItemDef(player, currentWave = 1) {
     }
 
     return weightedPickDef(pool, { avoidIds: avoid });
-}
-
-function rollBossDropDefs(player, currentWave = 1) {
-    let wave = currentWave || 1;
-    let pool = getBossPool(wave);
-
-    let avoid = [];
-    if (player && Array.isArray(player.passiveItems)) {
-        avoid = player.passiveItems.filter((id) => {
-            let d = getItemDef(id);
-            return d && d.unique;
-        });
-    }
-    if (player && player.activeItem) {
-        let d = getItemDef(player.activeItem.id);
-        if (d && d.unique) avoid.push(player.activeItem.id);
-    }
-
-    let count = 1;
-    let twoChance = clampNumber(0.25 + wave * 0.03, 0.25, 0.65);
-    if (Math.random() < twoChance) count = 2;
-
-    let drops = [];
-    for (let i = 0; i < count; i++) {
-        let def = weightedPickDef(pool, { avoidIds: avoid.concat(drops.map(d => d.id)) });
-        drops.push(def);
-    }
-
-    return drops;
 }
 
 // Collectible pickup entity
@@ -711,6 +866,50 @@ class ItemPickup {
 
 function createItemPickup(x, y, itemId) {
     return new ItemPickup(x, y, itemId);
+}
+
+function getBossPool(currentWave = 1) {
+    let wave = currentWave || 1;
+    return ITEM_DEFS.filter(d => d.boss).map(def => {
+        let tier = getRarityDef(def.rarity).tier;
+
+        let weight = 1;
+        if (tier === 2) weight = 1;
+        if (tier === 3) weight = 0.8 + wave * 0.05;
+        if (tier === 4) weight = 0.35 + wave * 0.06;
+        weight = clampNumber(weight, 0.05, 2.0);
+
+        return { def, weight };
+    });
+}
+
+function rollBossDropDefs(player, currentWave = 1) {
+    let wave = currentWave || 1;
+    let pool = getBossPool(wave);
+
+    let avoid = [];
+    if (player && Array.isArray(player.passiveItems)) {
+        avoid = player.passiveItems.filter((id) => {
+            let d = getItemDef(id);
+            return d && d.unique;
+        });
+    }
+    if (player && player.activeItem) {
+        let d = getItemDef(player.activeItem.id);
+        if (d && d.unique) avoid.push(player.activeItem.id);
+    }
+
+    let count = 1;
+    let twoChance = clampNumber(0.25 + wave * 0.03, 0.25, 0.65);
+    if (Math.random() < twoChance) count = 2;
+
+    let drops = [];
+    for (let i = 0; i < count; i++) {
+        let def = weightedPickDef(pool, { avoidIds: avoid.concat(drops.map(d => d.id)) });
+        drops.push(def);
+    }
+
+    return drops;
 }
 
 function createRandomShopItemPickup(x, y, player, currentWave = 1) {
