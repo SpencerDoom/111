@@ -511,7 +511,7 @@ class UIManager {
     }
 
     // Utility methods
-    drawButton(x, y, w, h, text, isHovered = false) {
+    drawButton(x, y, w, h, buttonText, isHovered = false) {
         push();
         
         if (isHovered) {
@@ -525,7 +525,7 @@ class UIManager {
         fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
         textAlign(CENTER, CENTER);
         textSize(16);
-        text(text, x + w/2, y + h/2);
+        text(buttonText, x + w/2, y + h/2);
         
         pop();
     }
