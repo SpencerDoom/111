@@ -246,7 +246,7 @@ class AchievementSystem {
             text(achievement.icon, x + 30, y + 25);
             
             // Name
-            fill(achievement.unlocked ? 255, 215, 0 : 150);
+            fill(achievement.unlocked ? color(255, 215, 0) : 150);
             textSize(12);
             textAlign(LEFT, TOP);
             text(achievement.name, x + 60, y + 10);
