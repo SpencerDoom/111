@@ -1,4 +1,4 @@
-// Main Game class that coordinates all systems
+// Main Game class that coordinates all systems - 支持新道具系统
 class Game {
     constructor() {
         // Game systems
@@ -17,6 +17,15 @@ class Game {
         this.player = null;
         this.enemies = [];
         this.powerUps = [];
+        
+        // ===== 新道具系统扩展 =====
+        // 独立实体管理
+        this.soulFragments = []; // 灵魂碎片
+        this.mirrorClones = []; // 分身镜像
+        this.auras = []; // 光环效果
+        
+        // 事件总线系统
+        this.eventListeners = {};
         
         // Global effects
         this.timeStopEndTime = 0;
@@ -98,199 +107,111 @@ class Game {
             {
                 id: 'shield',
                 name: "能量护盾",
-                description: "获得可阻挡3次攻击的护盾。",
+                description: "获得2点护盾（可叠加）。",
                 apply: (p) => {
-                    p.shield = (p.shield || 0) + 3;
-                    p.maxShield = p.shield;
+                    p.shield = (p.shield || 0) + 2;
+                    p.maxShield = (p.maxShield || 0) + 2;
                 }
             },
             {
-                id: 'explosive_rounds',
-                name: "爆炸弹",
-                description: "投射物击中时爆炸，造成范围伤害。",
-                apply: (p) => {
-                    p.explosiveShots = true;
-                }
-            },
-            {
-                id: 'multi_shot',
-                name: "多重射击",
-                description: "额外发射2发投射物。",
-                apply: (p) => {
-                    p.projectileCount = (p.projectileCount || 1) + 2;
-                }
-            },
-            {
-                id: 'vampirism',
+                id: 'vampiric',
                 name: "吸血",
-                description: "每击败一个敌人恢复1点生命值。",
+                description: "击杀敌人时恢复1点生命值。",
                 apply: (p) => {
                     p.vampiric = true;
                 }
             },
             {
                 id: 'gold_magnet',
-                name: "金币磁铁",
-                description: "自动吸引金币。",
+                name: "黄金磁铁",
+                description: "自动吸引附近的黄金。",
                 apply: (p) => {
                     p.goldMagnet = true;
                 }
             },
             {
-                id: 'double_jump',
-                name: "双倍冲刺",
-                description: "冲刺距离翻倍且充能更快。",
+                id: 'xp_magnet',
+                name: "经验磁铁",
+                description: "自动吸引附近的经验。",
                 apply: (p) => {
-                    p.dashDistance *= 2;
-                    p.dashCooldown = Math.max(300, p.dashCooldown - 200);
-                }
-            },
-            {
-                id: 'crit_chance',
-                name: "暴击",
-                description: "20%几率造成双倍伤害。",
-                apply: (p) => {
-                    p.critChance = (p.critChance || 0) + 0.2;
-                }
-            },
-            {
-                id: 'size_reduction',
-                name: "敏捷训练",
-                description: "减少碰撞体积20%。",
-                apply: (p) => {
-                    p.size *= 0.8;
-                }
-            },
-            {
-                id: 'poison_resistance',
-                name: "毒素抗性",
-                description: "免疫毒素伤害。",
-                apply: (p) => {
-                    p.poisonImmune = true;
-                }
-            },
-            {
-                id: 'knockback',
-                name: "击退力",
-                description: "投射物击中敌人时将其击退。",
-                apply: (p) => {
-                    p.knockbackForce = (p.knockbackForce || 0) + 5;
+                    p.xpMagnet = true;
                 }
             }
         ];
         
-        this.availableTalents = [];
-        
-        // Portal system
-        this.portalPosition = { x: null, y: null, active: false };
-        this.portalSize = 50;
-        
-        // Game statistics for achievements and progression
+        // Achievement system integration
         this.totalKills = 0;
-        this.totalPowerUpsCollected = 0;
-        this.totalGoldCollected = 0;
-        this.totalShieldPoints = 0;
-        this.totalExplosions = 0;
-        this.totalCriticalHits = 0;
-        this.totalTalentsSelected = 0;
-        this.bossesDefeated = 0;
-        this.damageFreeWaves = 0;
-        this.elapsedTime = 0;
         this.recentKills = 0;
         this.recentKillTimeWindow = 0;
-        this.lastKillTime = 0;
-        this.waveStartTime = 0;
+        this.totalGoldCollected = 0;
+        this.totalPowerUpsCollected = 0;
+        this.damageFreeWaves = 0;
         this.waveTookDamage = false;
         this.inWave = false;
-    }
-    
-    initialize() {
-        // Initialize game state
-        this.player = new Player(width / 2, height - 100);
-        this.enemies = [];
-        this.powerUps = [];
-        this.timeStopEndTime = 0;
-        this.shopSystem = new ShopSystem();
-        this.gameState.setState('start');
+        this.totalPlayTime = 0;
         
-        // Initialize audio system placeholder
-        this.initializeAudio();
+        // Time events queue for delayed effects
+        this.timeEvents = [];
         
-        console.log("Game initialized");
+        // Portal management
+        this.portal = null;
+        this.portalActive = false;
     }
     
-    initializeAudio() {
-        // Placeholder for audio initialization
-        // In a full implementation, this would load sound files
-        this.audioEnabled = true;
+    init() {
+        this.gameState.changeState('playing');
+        this.player = new Player(width / 2, height / 2);
+        this.starField = new StarField(150);
+        this.portal = null;
+        this.portalActive = false;
     }
     
-    update() {
-        // Update elapsed time
+    update(deltaTime) {
         if (this.gameState.getState() === 'playing') {
-            this.elapsedTime += deltaTime;
+            this.updateGameplay(deltaTime);
+        } else if (this.gameState.getState() === 'level_up') {
+            this.updateLevelUp();
+        } else if (this.gameState.getState() === 'game_over') {
+            this.updateGameOver();
+        } else if (this.gameState.getState() === 'shop') {
+            this.updateShop();
         }
-        
-        // Update screen shake
-        this.screenShake.update();
-        
-        // Update achievement system
-        this.achievementSystem.update(this);
-        
-        // Handle different game states
-        switch(this.gameState.getState()) {
-            case 'playing':
-                this.updatePlaying();
-                break;
-            case 'levelUp':
-                this.updateLevelUp();
-                break;
-            case 'gameOver':
-                this.updateGameOver();
-                break;
-            case 'shop':
-                this.updateShop();
-                break;
-        }
-        
-        // Always update visual systems
-        this.starField.update();
-        this.particleSystem.update();
     }
     
-    updatePlaying() {
-        // Track wave start for achievements
-        if (!this.inWave && this.waveManager.getCurrentWave() > 0) {
-            this.inWave = true;
-            this.waveStartTime = millis();
-            this.waveTookDamage = false;
+    updateGameplay(deltaTime) {
+        // Update total play time
+        this.totalPlayTime += deltaTime;
+        
+        // Update portal timer
+        if (this.portalActive) {
+            this.portalActive = false; // Reset for next wave
         }
-
-        // Global time stop (items)
-        let timeStopped = millis() < (this.timeStopEndTime || 0);
+        
+        // Check if we should spawn next wave
+        if (this.enemies.length === 0 && !this.waveManager.isBossActive()) {
+            if (!this.portalActive) {
+                this.spawnPortal();
+            }
+            this.portalActive = true;
+        }
+        
+        // Update time events
+        this.updateTimeEvents(deltaTime);
+        
+        // Update star field
+        this.starField.update();
         
         // Update player
         this.player.update();
         
-        // Check if player is dead
-        if (this.player.isDead()) {
-            this.gameState.gameOver();
-            return;
-        }
-        
-        // Update wave manager (pause spawns while portal is active)
-        if (!timeStopped && !this.portalPosition.active) {
-            this.waveManager.update(this.enemies, this.player);
-        }
-        
-        // Update environment system
-        if (!timeStopped) {
-            this.environmentSystem.update(this);
-        }
+        // Handle input
+        this.handleInput();
         
         // Update enemies
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let enemy = this.enemies[i];
+            let timeStopped = millis() < this.timeStopEndTime;
+            
             if (!timeStopped) {
                 enemy.update(this.player);
             }
@@ -304,8 +225,11 @@ class Game {
                     
                     // Track gold collection
                     this.totalGoldCollected += enemy.goldValue;
+                    this.player.onGoldCollected(enemy.goldValue); // 触发金币收集事件
                     
-                    // No item drops from regular enemies (items come from shop + boss drops)
+                    // 触发击杀事件
+                    this.triggerEvent('onKill', enemy);
+                    this.player.onKill(enemy);
                     
                     // Track achievements
                     this.totalKills++;
@@ -341,6 +265,27 @@ class Game {
                     this.totalPowerUpsCollected++;
                 }
                 this.powerUps.splice(i, 1);
+            }
+        }
+        
+        // ===== 新独立实体更新 =====
+        // 更新灵魂碎片
+        for (let i = this.soulFragments.length - 1; i >= 0; i--) {
+            let soul = this.soulFragments[i];
+            soul.update();
+            
+            if (!soul.active) {
+                this.soulFragments.splice(i, 1);
+            }
+        }
+        
+        // 更新分身镜像
+        for (let i = this.mirrorClones.length - 1; i >= 0; i--) {
+            let clone = this.mirrorClones[i];
+            clone.update();
+            
+            if (!clone.active) {
+                this.mirrorClones.splice(i, 1);
             }
         }
         
@@ -399,458 +344,511 @@ class Game {
                 if (checkCircleCollision(projectile, enemy)) {
                     let removeProjectile = this.handleProjectileCollision(projectile, enemy);
                     if (removeProjectile) {
-                        this.player.projectiles.splice(i, 1);
+                        hit = true;
+                        break;
                     }
-                    hit = true;
-                    break;
                 }
             }
             
-            // Check boss and minions
+            // Check boss if active
             if (!hit && this.waveManager.isBossActive()) {
                 let boss = this.waveManager.getBoss();
-                
-                // Check boss
                 if (checkCircleCollision(projectile, boss)) {
                     let removeProjectile = this.handleProjectileCollision(projectile, boss);
                     if (removeProjectile) {
-                        this.player.projectiles.splice(i, 1);
+                        hit = true;
                     }
-                    hit = true;
-                } else {
-                    // Check minions
-                    for (let k = boss.minions.length - 1; k >= 0; k--) {
-                        let minion = boss.minions[k];
-                        if (checkCircleCollision(projectile, minion)) {
-                            let removeProjectile = this.handleProjectileCollision(projectile, minion);
-                            if (removeProjectile) {
-                                this.player.projectiles.splice(i, 1);
-                            }
-                            hit = true;
-                            
-                            if (minion.isDead()) {
-                                boss.minions.splice(k, 1);
-                            }
-                            break;
-                        }
+                }
+            }
+            
+            if (hit) {
+                this.player.projectiles.splice(i, 1);
+            }
+        }
+        
+        // Enemy projectiles vs player
+        for (let enemy of this.enemies) {
+            if (!enemy.projectiles) continue;
+            
+            for (let i = enemy.projectiles.length - 1; i >= 0; i--) {
+                let projectile = enemy.projectiles[i];
+                
+                if (checkCircleCollision(projectile, this.player)) {
+                    this.handleProjectileCollision(projectile, this.player);
+                    enemy.projectiles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Boss projectiles vs player
+        if (this.waveManager.isBossActive()) {
+            let boss = this.waveManager.getBoss();
+            if (boss && boss.projectiles) {
+                for (let i = boss.projectiles.length - 1; i >= 0; i--) {
+                    let projectile = boss.projectiles[i];
+                    
+                    if (checkCircleCollision(projectile, this.player)) {
+                        this.handleProjectileCollision(projectile, this.player);
+                        boss.projectiles.splice(i, 1);
                     }
                 }
             }
         }
         
-        // Enemy projectiles vs player (handled in enemy update methods)
-        // PowerUps vs player (handled in powerup update methods)
+        // Enemy collision vs player
+        for (let enemy of this.enemies) {
+            if (checkCircleCollision(enemy, this.player)) {
+                this.handleEnemyCollision(enemy, this.player);
+            }
+        }
+        
+        // Boss collision vs player
+        if (this.waveManager.isBossActive()) {
+            let boss = this.waveManager.getBoss();
+            if (boss && checkCircleCollision(boss, this.player)) {
+                this.handleEnemyCollision(boss, this.player);
+            }
+        }
     }
     
     handleProjectileCollision(projectile, target) {
-        // Calculate damage with critical hits
-        let actualDamage = projectile.damage;
+        // Calculate damage
+        let damage = projectile.damage;
+        
+        // Check for critical hit
         if (projectile.isCritical) {
-            actualDamage *= 2; // Double damage on crit
+            damage *= 2;
+            this.player.onCrit(target); // 触发暴击事件
         }
         
-        // Apply damage to target
-        target.takeDamage(actualDamage);
+        // Apply damage
+        target.takeDamage(damage);
         
-        // Apply knockback if projectile has knockback force
-        if (projectile.knockbackForce && projectile.knockbackForce > 0) {
+        // Check if target died
+        let targetDied = target.isDead();
+        
+        // Apply knockback
+        if (projectile.knockbackForce > 0 && !targetDied) {
             let angle = atan2(target.y - projectile.y, target.x - projectile.x);
             target.x += cos(angle) * projectile.knockbackForce;
             target.y += sin(angle) * projectile.knockbackForce;
         }
         
-        // Handle special projectile effects
-        if (projectile.type === 'player') {
-            // Player projectile hit enemy
-            if (target.poisonEffect && !this.player.poisonImmune) {
-                // Apply poison effect
-                target.poisoned = true;
-                target.poisonEndTime = millis() + 3000; // 3 seconds
-                target.poisonDamage = 1;
-            }
-            
-            if (projectile.slowEffect) {
-                // Apply slow effect
-                target.slowed = true;
-                target.slowEndTime = millis() + 2000; // 2 seconds
-                target.originalSpeed = target.speed;
-                target.speed *= 0.5; // 50% speed reduction
-            }
-            
-            // Vampiric effect - heal player on kill
-            if (this.player.vampiric || this.player.tempVampiric > 0) {
-                if (target.isDead()) {
-                    this.player.heal(1);
-                }
-            }
-            
-            // Explosive effect
-            if (this.player.explosiveShots && !projectile.exploded) {
-                projectile.exploded = true;
-                this.addExplosion(projectile.x, projectile.y, [255, 150, 0], 10);
-                
-                // Damage enemies in explosion radius
-                let explosionRadius = 60;
-                let explosionDamage = Math.floor(actualDamage * 0.5);
-                
-                // Damage regular enemies
-                for (let enemy of this.enemies) {
-                    if (enemy !== target) {
-                        let distance = dist(projectile.x, projectile.y, enemy.x, enemy.y);
-                        if (distance < explosionRadius) {
-                            enemy.takeDamage(explosionDamage);
-                        }
-                    }
-                }
-                
-                // Damage boss
-                if (this.waveManager.isBossActive()) {
-                    let boss = this.waveManager.getBoss();
-                    if (boss !== target) {
-                        let distance = dist(projectile.x, projectile.y, boss.x, boss.y);
-                        if (distance < explosionRadius) {
-                            boss.takeDamage(explosionDamage);
-                        }
-                    }
-                }
-                
-                this.addScreenShake(8, 15);
-            }
-            
-            // Handle piercing
-            if (projectile.pierceCount > 0) {
-                projectile.pierceCount--;
-                return false; // Don't remove projectile
-            }
-            
-            return true; // Remove projectile on hit
-        } else {
-            // Enemy projectile hit player
-            if (projectile.poisonEffect) {
-                this.player.poisoned = true;
-                this.player.poisonEndTime = millis() + 3000;
-                this.player.poisonDamage = projectile.damage;
-            }
-            return true; // Remove enemy projectile on hit
+        // Check for explosive effect
+        if (projectile.explosive && targetDied) {
+            this.handleExplosion(projectile.x, projectile.y, damage);
         }
+        
+        // 触发投射物击中事件
+        this.player.onProjectileHit(projectile, target);
+        
+        // Handle piercing
+        if (projectile.pierceCount > 0) {
+            projectile.pierceCount--;
+            return false; // Don't remove projectile
+        }
+        
+        return true; // Remove projectile
+    }
+    
+    handleEnemyCollision(enemy, player) {
+        // Apply damage to player
+        player.takeDamage(enemy.contactDamage);
+        this.waveTookDamage = true;
+        
+        // Check for spike damage (钉刺护体)
+        if (player.hasSpikeBody) {
+            enemy.takeDamage(player.spikeDamage);
+        }
+    }
+    
+    handleExplosion(x, y, baseDamage) {
+        let explosionRadius = 60;
+        
+        // Damage enemies in range
+        for (let enemy of this.enemies) {
+            let distance = dist(x, y, enemy.x, enemy.y);
+            if (distance <= explosionRadius) {
+                let damage = Math.max(1, baseDamage - Math.floor(distance / 10));
+                enemy.takeDamage(damage);
+            }
+        }
+        
+        // Damage boss if in range
+        if (this.waveManager.isBossActive()) {
+            let boss = this.waveManager.getBoss();
+            if (boss) {
+                let distance = dist(x, y, boss.x, boss.y);
+                if (distance <= explosionRadius) {
+                    let damage = Math.max(1, Math.floor(baseDamage * 0.5) - Math.floor(distance / 15));
+                    boss.takeDamage(damage);
+                }
+            }
+        }
+        
+        // Visual effect
+        this.addExplosion(x, y, [255, 200, 100], 15);
+    }
+    
+    handleInput() {
+        // Handle mouse input for shooting
+        if (mouseIsPressed) {
+            this.player.shoot();
+        }
+        
+        // Handle keyboard input
+        if (keyIsPressed) {
+            // Dash on space
+            if (key === ' ') {
+                this.player.attemptDash();
+            }
+            
+            // Use active item on F
+            if (key === 'f' || key === 'F') {
+                this.player.useActiveItem(this);
+            }
+            
+            // Toggle turret mode on T (if available)
+            if (key === 't' || key === 'T') {
+                if (this.player.hasItem && this.player.hasItem('turret_mode')) {
+                    this.player.useActiveItem(this);
+                }
+            }
+        }
+    }
+    
+    spawnPortal() {
+        this.portalActive = true;
     }
     
     updatePortal() {
-        if (this.portalPosition.active) {
-            // Check if player enters portal
-            let distance = dist(this.player.x, this.player.y, this.portalPosition.x, this.portalPosition.y);
-            if (distance < this.portalSize/2 + this.player.size/2) {
-                if (this.shopSystem && this.shopSystem.open) {
-                    this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
-                }
-                this.gameState.openShop();
-                this.portalPosition.active = false;
+        // Portal logic handled by wave manager
+    }
+    
+    // ===== 新道具系统方法 =====
+    
+    // 事件系统
+    triggerEvent(eventName, ...args) {
+        if (!this.eventListeners[eventName]) return;
+        
+        for (let callback of this.eventListeners[eventName]) {
+            try {
+                callback(...args);
+            } catch (error) {
+                console.error(`Error in event listener ${eventName}:`, error);
             }
         }
     }
     
-    draw() {
-        // Clear screen
-        background(this.uiManager.colorScheme.background);
+    addEventListener(eventName, callback) {
+        if (!this.eventListeners[eventName]) {
+            this.eventListeners[eventName] = [];
+        }
+        this.eventListeners[eventName].push(callback);
+    }
+    
+    removeEventListener(eventName, callback) {
+        if (!this.eventListeners[eventName]) return;
         
-        // Draw starfield background
+        let index = this.eventListeners[eventName].indexOf(callback);
+        if (index > -1) {
+            this.eventListeners[eventName].splice(index, 1);
+        }
+    }
+    
+    // 时间事件队列
+    addTimeEvent(delay, callback) {
+        this.timeEvents.push({
+            executeTime: millis() + delay,
+            callback: callback
+        });
+    }
+    
+    updateTimeEvents(deltaTime) {
+        for (let i = this.timeEvents.length - 1; i >= 0; i--) {
+            let event = this.timeEvents[i];
+            if (millis() >= event.executeTime) {
+                try {
+                    event.callback();
+                } catch (error) {
+                    console.error('Error in time event:', error);
+                }
+                this.timeEvents.splice(i, 1);
+            }
+        }
+    }
+    
+    // BOSS掉落系统
+    dropBossItems(x, y) {
+        this.spawnBossDropsAt(x, y);
+    }
+
+    spawnBossDropsAt(x, y) {
+        if (typeof rollBossDropDefs === 'function') {
+            let drops = rollBossDropDefs(this.player, this.waveManager.getCurrentWave());
+            
+            for (let i = 0; i < drops.length; i++) {
+                let drop = drops[i];
+                let itemX = x + (i === 0 ? -20 : 20);
+                let itemY = y;
+                this.powerUps.push(createItemPickup(itemX, itemY, drop.id));
+            }
+        }
+    }
+
+    spawnBossDrops(boss) {
+        if (typeof rollBossDropDefs === 'function') {
+            let drops = rollBossDropDefs(this.player, this.waveManager.getCurrentWave());
+            
+            for (let i = 0; i < drops.length; i++) {
+                let drop = drops[i];
+                let x = boss.x + (i === 0 ? -20 : 20);
+                let y = boss.y;
+                this.powerUps.push(createItemPickup(x, y, drop.id));
+            }
+        }
+    }
+    
+    // 屏幕震动
+    addScreenShake(intensity, duration) {
+        if (this.screenShake) {
+            this.screenShake.shake(intensity, duration);
+        }
+    }
+    
+    // 爆炸特效
+    addExplosion(x, y, color, size) {
+        if (this.particleSystem) {
+            this.particleSystem.addExplosion(x, y, color, size);
+        }
+    }
+    
+    // 触发等级提升
+    triggerLevelUp() {
+        this.gameState.changeState('level_up');
+        this.player.availableTalents = this.selectTalents();
+    }
+    
+    // 选择天赋
+    selectTalents() {
+        let availableTalents = this.allTalents.slice();
+        let selectedTalents = [];
+        
+        // Select 3 random talents
+        for (let i = 0; i < 3; i++) {
+            if (availableTalents.length === 0) break;
+            
+            let randomIndex = Math.floor(Math.random() * availableTalents.length);
+            selectedTalents.push(availableTalents[randomIndex]);
+            availableTalents.splice(randomIndex, 1);
+        }
+        
+        return selectedTalents;
+    }
+    
+    // 选择天赋
+    chooseTalent(talentIndex) {
+        if (talentIndex < 0 || talentIndex >= this.player.availableTalents.length) {
+            return;
+        }
+        
+        let talent = this.player.availableTalents[talentIndex];
+        talent.apply(this.player);
+        
+        this.gameState.changeState('playing');
+    }
+    
+    // 重启游戏
+    restart() {
+        this.gameState.changeState('playing');
+        this.player = new Player(width / 2, height / 2);
+        this.enemies = [];
+        this.powerUps = [];
+        this.waveManager.reset();
+        this.totalKills = 0;
+        this.recentKills = 0;
+        this.totalGoldCollected = 0;
+        this.totalPowerUpsCollected = 0;
+        this.damageFreeWaves = 0;
+        this.waveTookDamage = false;
+        this.inWave = false;
+        this.totalPlayTime = 0;
+        
+        // 重置独立实体
+        this.soulFragments = [];
+        this.mirrorClones = [];
+        this.auras = [];
+        this.timeEvents = [];
+    }
+    
+    display() {
+        // Display background
+        background(20, 25, 40);
+        
+        // Display star field
         this.starField.display();
         
-        // Apply screen shake
-        let shakeOffset = this.screenShake.getOffset();
-        push();
-        translate(shakeOffset.x, shakeOffset.y);
+        // Display environment effects
+        this.environmentSystem.display(this);
         
-        // Handle different game states
-        switch(this.gameState.getState()) {
-            case 'start':
-                this.drawStart();
-                break;
-            case 'playing':
-                this.drawPlaying();
-                break;
-            case 'levelUp':
-                this.drawLevelUp();
-                break;
-            case 'gameOver':
-                this.drawGameOver();
-                break;
-            case 'shop':
-                this.drawShop();
-                break;
-            case 'achievements':
-                this.achievementSystem.drawAchievementsMenu();
-                break;
+        // Display portal
+        if (this.portalActive) {
+            this.displayPortal();
         }
         
-        pop();
-        
-        // Draw particles (not affected by screen shake)
-        this.particleSystem.display();
-        
-        // Draw achievement notifications (not affected by screen shake)
-        this.achievementSystem.draw();
-    }
-    
-    drawStart() {
-        this.uiManager.drawStartScreen();
-    }
-    
-    drawPlaying() {
-        // Draw environment effects first
-        this.environmentSystem.draw();
-        
-        // Draw game entities
-        this.player.display();
-        
-        // Draw enemies
-        for (let enemy of this.enemies) {
-            enemy.display();
-        }
-        
-        // Draw boss if active
-        if (this.waveManager.isBossActive()) {
-            let boss = this.waveManager.getBoss();
-            // Pass player reference for beam drawing
-            if (boss.isFiringBeam) {
-                boss.drawBeam(this.player);
+        // Display game entities based on state
+        if (this.gameState.getState() === 'playing' || this.gameState.getState() === 'level_up') {
+            // Display enemies
+            for (let enemy of this.enemies) {
+                enemy.display();
             }
-            boss.display();
+            
+            // Display boss if active
+            if (this.waveManager.isBossActive()) {
+                let boss = this.waveManager.getBoss();
+                if (boss) {
+                    boss.display();
+                }
+            }
+            
+            // Display player
+            this.player.display();
+            
+            // ===== 显示独立实体 =====
+            // 显示灵魂碎片
+            for (let soul of this.soulFragments) {
+                soul.display();
+            }
+            
+            // 显示分身镜像
+            for (let clone of this.mirrorClones) {
+                clone.display();
+            }
+            
+            // Display powerups
+            for (let powerUp of this.powerUps) {
+                powerUp.display();
+            }
         }
         
-        // Draw powerups
-        for (let powerUp of this.powerUps) {
-            powerUp.display();
+        // Display UI
+        this.uiManager.display(this);
+        
+        // Display game state overlays
+        if (this.gameState.getState() === 'level_up') {
+            this.displayLevelUpOverlay();
+        } else if (this.gameState.getState() === 'game_over') {
+            this.displayGameOverOverlay();
+        } else if (this.gameState.getState() === 'shop') {
+            this.displayShopOverlay();
         }
-        
-        // Draw portal
-        if (this.portalPosition.active) {
-            this.drawPortal();
-        }
-        
-        // Draw HUD (not affected by screen shake)
-        push();
-        translate(-this.screenShake.x, -this.screenShake.y);
-        this.uiManager.drawHUD(this.player, this.waveManager);
-        
-        // Draw boss health bar if boss is active
-        if (this.waveManager.isBossActive()) {
-            this.uiManager.drawBossHealthBar(this.waveManager.getBoss());
-        }
-        pop();
     }
     
-    drawLevelUp() {
-        // Draw game in background (dimmed)
-        this.drawPlaying();
-        
-        // Draw level up screen over it
+    displayPortal() {
         push();
-        translate(-this.screenShake.x, -this.screenShake.y);
-        this.uiManager.drawLevelUpScreen(this.availableTalents);
-        pop();
-    }
-    
-    drawGameOver() {
-        // Draw game in background (dimmed)
-        this.drawPlaying();
+        translate(width / 2, height / 2);
         
-        // Draw game over screen
-        push();
-        translate(-this.screenShake.x, -this.screenShake.y);
-        this.uiManager.drawGameOverScreen(this.player, this.waveManager);
-        pop();
-    }
-    
-    drawShop() {
-        // Draw game in background (dimmed by shop overlay)
-        this.drawPlaying();
-
-        // Draw shop overlay
-        push();
-        translate(-this.screenShake.x, -this.screenShake.y);
-        this.uiManager.drawShopScreen(this.player, this.shopSystem, this.waveManager);
-        pop();
-    }
-    
-    drawPortal() {
-        push();
-        translate(this.portalPosition.x, this.portalPosition.y);
+        let pulse = sin(millis() * 0.01) * 0.2 + 0.8;
+        let size = 40 * pulse;
         
-        // Portal animation
-        let pulseSize = this.portalSize + sin(millis() * 0.01) * 10;
-        
-        // Outer glow
-        fill(100, 200, 255, 100);
+        fill(100, 150, 255, 150);
         noStroke();
-        ellipse(0, 0, pulseSize + 20, pulseSize + 20);
+        ellipse(0, 0, size + 20, size + 20);
         
-        // Main portal
-        fill(50, 150, 255);
+        fill(150, 200, 255);
         stroke(255);
         strokeWeight(3);
-        ellipse(0, 0, pulseSize, pulseSize);
+        ellipse(0, 0, size, size);
         
-        // Portal emoji
-        fill(255);
         noStroke();
+        fill(255);
         textAlign(CENTER, CENTER);
-        textSize(this.portalSize * 0.6);
-        text("🌀", 0, 0);
+        textSize(20);
+        text('传送门', 0, 0);
         
         pop();
     }
     
-    // Input handling
-    handleMousePressed() {
-        switch(this.gameState.getState()) {
-            case 'start':
-                this.startGame();
-                break;
-            case 'playing':
-                this.player.shoot();
-                break;
-            case 'shop':
-                this.handleShopClick(mouseX, mouseY);
-                break;
-            case 'gameOver':
-                this.restartGame();
-                break;
-        }
-    }
-    
-    handleMousePressed2() { // Right click
-        if (this.gameState.isState('playing')) {
-            this.player.attemptDash();
-        }
-    }
-
-    handleShopClick(mx, my) {
-        if (!this.shopSystem || !this.uiManager) return;
-
-        let itemRects = this.uiManager.getShopItemRects(this.shopSystem.items.length);
-        for (let i = 0; i < itemRects.length; i++) {
-            let r = itemRects[i];
-            if (this.uiManager.isPointInRect(mx, my, r.x, r.y, r.w, r.h)) {
-                this.shopSystem.purchase(i, this.player);
-                return;
-            }
-        }
-
-        let rerollRect = this.uiManager.getShopRerollButtonRect();
-        if (this.uiManager.isPointInRect(mx, my, rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h)) {
-            this.shopSystem.reroll(this.player, this.waveManager.getCurrentWave());
-        }
-    }
-    
-    handleKeyPressed() {
-        if (this.gameState.isState('levelUp')) {
-            this.handleTalentSelection();
-        } else if (this.gameState.isState('shop')) {
-            if (key === 'Escape') {
-                this.gameState.continuePlaying();
-            } else if (this.shopSystem && this.shopSystem.handleKeyPressed) {
-                this.shopSystem.handleKeyPressed(key, this.player, this.waveManager.getCurrentWave());
-            }
-        } else if (this.gameState.isState('playing')) {
-            // Active item usage
-            if ((key === 'e' || key === 'E' || key === ' ') && this.player && this.player.useActiveItem) {
-                this.player.useActiveItem(this);
-            }
-        }
-    }
-    
-    handleTalentSelection() {
-        let selection = -1;
-        if (key === '1') selection = 0;
-        else if (key === '2') selection = 1;
-        else if (key === '3') selection = 2;
+    displayLevelUpOverlay() {
+        push();
+        fill(0, 0, 0, 150);
+        rect(0, 0, width, height);
         
-        if (selection >= 0 && selection < this.availableTalents.length) {
-            let selectedTalent = this.availableTalents[selection];
-            selectedTalent.apply(this.player);
-            this.totalTalentsSelected++; // Track achievements
-            console.log(`Applied talent: ${selectedTalent.name}`);
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(32);
+        text('等级提升！', width / 2, height / 2 - 200);
+        
+        textSize(18);
+        text('选择一个天赋:', width / 2, height / 2 - 150);
+        
+        let yStart = height / 2 - 100;
+        for (let i = 0; i < this.player.availableTalents.length; i++) {
+            let talent = this.player.availableTalents[i];
+            let y = yStart + i * 80;
             
-            this.gameState.continuePlaying();
-        }
-    }
-    
-    startGame() {
-        this.initialize();
-        this.gameState.startGame();
-        console.log("Game started!");
-    }
-    
-    restartGame() {
-        this.initialize();
-        this.gameState.startGame();
-        console.log("Game restarted!");
-    }
-    
-    triggerLevelUp() {
-        // Generate 3 random talents
-        this.availableTalents = [];
-        let shuffledTalents = [...this.allTalents].sort(() => 0.5 - Math.random());
-        for (let i = 0; i < Math.min(3, shuffledTalents.length); i++) {
-            this.availableTalents.push(shuffledTalents[i]);
+            fill(i === 0 ? 'yellow' : 'white');
+            textSize(20);
+            text(`${i + 1}. ${talent.name}`, width / 2, y);
+            
+            textSize(14);
+            text(talent.description, width / 2, y + 20);
         }
         
-        this.gameState.triggerLevelUp();
-    }
-    
-    // Item drops
-    dropBossItems(x, y) {
-        if (typeof createBossItemPickups !== 'function') return;
-        let wave = this.waveManager.getCurrentWave();
-        let pickups = createBossItemPickups(x, y, this.player, wave);
-        for (let p of pickups) {
-            this.powerUps.push(p);
-        }
-    }
-
-    // Utility methods
-    addExplosion(x, y, color, particleCount = 10) {
-        let particles = createExplosion(x, y, color, particleCount);
-        for (let particle of particles) {
-            this.particleSystem.addParticle(particle);
-        }
-    }
-    
-    addScreenShake(intensity, duration) {
-        this.screenShake.start(intensity, duration);
-    }
-    
-    playSound(soundName) {
-        if (!this.audioEnabled || this.audioMuted) return;
+        textSize(16);
+        text('按 1, 2, 或 3 选择天赋', width / 2, height - 100);
         
-        // Placeholder for audio system
-        console.log(`Playing sound: ${soundName}`);
+        pop();
     }
     
-    createPortal(x, y) {
-        this.portalPosition.x = x;
-        this.portalPosition.y = y;
-        this.portalPosition.active = true;
-        console.log("Portal created!");
+    displayGameOverOverlay() {
+        push();
+        fill(0, 0, 0, 180);
+        rect(0, 0, width, height);
+        
+        fill(255, 100, 100);
+        textAlign(CENTER, CENTER);
+        textSize(48);
+        text('游戏结束', width / 2, height / 2 - 100);
+        
+        fill(255);
+        textSize(20);
+        text(`存活时间: ${Math.floor(this.totalPlayTime / 1000)} 秒`, width / 2, height / 2 - 40);
+        text(`击杀数: ${this.totalKills}`, width / 2, height / 2 - 10);
+        text(`收集金币: ${this.totalGoldCollected}`, width / 2, height / 2 + 20);
+        text(`无伤波数: ${this.damageFreeWaves}`, width / 2, height / 2 + 50);
+        
+        textSize(16);
+        text('按 R 重新开始', width / 2, height / 2 + 100);
+        
+        pop();
     }
-}
-
-// Global functions for compatibility with existing code
-function createExplosion(x, y, color, particleCount = 10) {
-    return Array.from({length: particleCount}, () => 
-        new ExplosionParticle(x, y, color, random(3, 8), 1)
-    );
-}
-
-function addScreenShake(intensity, duration) {
-    if (typeof game !== 'undefined') {
-        game.addScreenShake(intensity, duration);
+    
+    displayShopOverlay() {
+        this.shopSystem.display(this);
     }
-}
-
-function playSound(soundName) {
-    if (typeof game !== 'undefined') {
-        game.playSound(soundName);
+    
+    keyPressed(keyValue) {
+        if (this.gameState.getState() === 'level_up') {
+            if (keyValue === '1' || keyValue === '2' || keyValue === '3') {
+                let talentIndex = parseInt(keyValue, 10) - 1;
+                this.chooseTalent(talentIndex);
+            }
+        } else if (this.gameState.getState() === 'game_over') {
+            if (keyValue === 'r' || keyValue === 'R') {
+                this.restart();
+            }
+        } else if (this.gameState.getState() === 'shop') {
+            if (keyValue === 'Escape') {
+                this.gameState.changeState('playing');
+            } else {
+                this.shopSystem.handleKeyPressed(keyValue, this.player, this.waveManager.getCurrentWave());
+            }
+        } else if (this.gameState.getState() === 'playing') {
+            if (keyValue === 'Escape') {
+                this.gameState.changeState('shop');
+                this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
+            }
+        }
     }
 }
