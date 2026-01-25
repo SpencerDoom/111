@@ -88,6 +88,13 @@ class ParticleSystem {
         this.particles.push(particle);
     }
     
+    addExplosion(x, y, color, particleCount = 10, explosionForce = 1) {
+        for (let i = 0; i < particleCount; i++) {
+            let size = random(3, 8);
+            this.addParticle(new ExplosionParticle(x, y, color, size, explosionForce));
+        }
+    }
+    
     update() {
         for (let i = this.particles.length - 1; i >= 0; i--) {
             let particle = this.particles[i];

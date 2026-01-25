@@ -148,8 +148,8 @@ class WaveManager {
 
     createPortal() {
         // Portal creation logic - this will be handled by the main game
-        if (typeof game !== 'undefined' && game.createPortal) {
-            game.createPortal(width / 2, height / 2);
+        if (typeof game !== 'undefined' && game.spawnPortal) {
+            game.spawnPortal();
         }
     }
 

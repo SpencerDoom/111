@@ -745,8 +745,10 @@ function getShopPool(currentWave = 1) {
 }
 
 function weightedPickDef(pool, { avoidIds = [] } = {}) {
-    let filtered = pool.filter(e => !avoidIds.includes(e.def.id));
-    if (filtered.length === 0) filtered = pool;
+    let filtered = pool.filter(e => e && e.def && !avoidIds.includes(e.def.id));
+    if (filtered.length === 0) filtered = pool.filter(e => e && e.def);
+
+    if (filtered.length === 0) return null;
 
     let total = 0;
     for (let e of filtered) total += e.weight;
@@ -906,7 +908,7 @@ function rollBossDropDefs(player, currentWave = 1) {
     let drops = [];
     for (let i = 0; i < count; i++) {
         let def = weightedPickDef(pool, { avoidIds: avoid.concat(drops.map(d => d.id)) });
-        drops.push(def);
+        if (def) drops.push(def);
     }
 
     return drops;
@@ -920,6 +922,8 @@ function createRandomShopItemPickup(x, y, player, currentWave = 1) {
 function createBossItemPickups(x, y, player, currentWave = 1) {
     let drops = rollBossDropDefs(player, currentWave);
     let pickups = [];
+
+    if (drops.length === 0) return pickups;
 
     if (drops.length === 1) {
         pickups.push(new ItemPickup(x, y, drops[0].id));

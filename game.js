@@ -224,14 +224,9 @@ class Game {
     updateGameplay(deltaTime) {
         // Update total play time
         this.totalPlayTime += deltaTime;
-        
-        // Update portal timer
-        if (this.portalActive) {
-            this.portalActive = false; // Reset for next wave
-        }
 
         // Check if we should spawn next wave
-        if (this.enemies.length === 0 && !this.waveManager.isBossActive()) {
+        if (this.enemies.length === 0 && !this.waveManager.isBossActive() && this.waveManager.enemiesSpawnedThisWave > 0) {
             if (!this.portalActive) {
                 this.spawnPortal();
             }
@@ -240,6 +235,9 @@ class Game {
 
         // Update time events
         this.updateTimeEvents(deltaTime);
+
+        // Update wave manager to spawn enemies
+        this.waveManager.update(this.enemies, this.player);
 
         // Update star field
         this.starField.update();
@@ -253,8 +251,8 @@ class Game {
         // Update enemies
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let enemy = this.enemies[i];
-            
-            if (!timeStopped) {
+
+            if (this.player.tempTimeSlow <= 0) {
                 enemy.update(this.player);
             }
             
@@ -292,7 +290,7 @@ class Game {
         }
         
         // Update boss if active
-        if (!timeStopped && this.waveManager.isBossActive()) {
+        if (this.player.tempTimeSlow <= 0 && this.waveManager.isBossActive()) {
             let boss = this.waveManager.getBoss();
             boss.update(this.player);
         }
@@ -333,9 +331,9 @@ class Game {
         
         // Handle collisions
         this.handleCollisions();
-        
+
         // Check environmental collisions
-        if (!timeStopped) {
+        if (this.player.tempTimeSlow <= 0) {
             this.environmentSystem.checkCollisions(this);
         }
         
@@ -454,6 +452,18 @@ class Game {
                 this.handleEnemyCollision(boss, this.player);
             }
         }
+
+        // Portal collision vs player
+        if (this.portalActive) {
+            let portalX = width / 2;
+            let portalY = height / 2;
+            let portalRadius = 30;
+            let distance = dist(portalX, portalY, this.player.x, this.player.y);
+            
+            if (distance < portalRadius + this.player.radius) {
+                this.enterPortal();
+            }
+        }
     }
     
     handleProjectileCollision(projectile, target) {
@@ -567,6 +577,14 @@ class Game {
     spawnPortal() {
         this.portalActive = true;
     }
+
+    enterPortal() {
+        if (this.gameState.getState() === 'playing') {
+            this.gameState.openShop();
+            this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
+            this.portalActive = false;
+        }
+    }
     
     updatePortal() {
         // Portal logic handled by wave manager
@@ -634,6 +652,8 @@ class Game {
         if (typeof rollBossDropDefs === 'function') {
             let drops = rollBossDropDefs(this.player, this.waveManager.getCurrentWave());
             
+            if (!drops || drops.length === 0) return;
+            
             for (let i = 0; i < drops.length; i++) {
                 let drop = drops[i];
                 let itemX = x + (i === 0 ? -20 : 20);
@@ -647,6 +667,8 @@ class Game {
         if (typeof rollBossDropDefs === 'function') {
             let drops = rollBossDropDefs(this.player, this.waveManager.getCurrentWave());
             
+            if (!drops || drops.length === 0) return;
+            
             for (let i = 0; i < drops.length; i++) {
                 let drop = drops[i];
                 let x = boss.x + (i === 0 ? -20 : 20);
@@ -659,7 +681,7 @@ class Game {
     // 屏幕震动
     addScreenShake(intensity, duration) {
         if (this.screenShake) {
-            this.screenShake.shake(intensity, duration);
+            this.screenShake.start(intensity, duration);
         }
     }
     
@@ -672,7 +694,7 @@ class Game {
     
     // 触发等级提升
     triggerLevelUp() {
-        this.gameState.changeState('level_up');
+        this.gameState.setState('level_up');
         this.player.availableTalents = this.selectTalents();
     }
     
@@ -712,12 +734,12 @@ class Game {
             this.totalShieldPoints += (shieldAfter - shieldBefore);
         }
         
-        this.gameState.changeState('playing');
+        this.gameState.setState('playing');
     }
     
     // 重启游戏
     restart() {
-        this.gameState.changeState('playing');
+        this.gameState.setState('playing');
         
         // Initialize player
         this.player = new Player(width / 2, height / 2);
@@ -810,8 +832,8 @@ class Game {
         }
         
         // Display UI
-        this.uiManager.display(this);
-        
+        this.uiManager.drawHUD(this.player, this.waveManager);
+
         // Display game state overlays
         if (this.gameState.getState() === 'start') {
             this.uiManager.drawStartScreen();
@@ -926,20 +948,20 @@ class Game {
             }
         } else if (this.gameState.getState() === 'shop') {
             if (keyValue === 'Escape') {
-                this.gameState.changeState('playing');
+                this.gameState.setState('playing');
             } else {
                 this.shopSystem.handleKeyPressed(keyValue, this.player, this.waveManager.getCurrentWave());
             }
         } else if (this.gameState.getState() === 'playing') {
             if (keyValue === 'Escape') {
-                this.gameState.changeState('shop');
+                this.gameState.openShop();
                 this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
             }
         }
     }
-    
+
     startGame() {
-        this.gameState.changeState('playing');
+        this.gameState.startGame();
         // Mark the start of the wave
         this.inWave = true;
     }
