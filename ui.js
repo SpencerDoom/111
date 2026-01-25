@@ -158,17 +158,27 @@ class UIManager {
         if (player.tempXPMagnet > 0) effects.push({emoji: "🌟", time: player.tempXPMagnet});
         if (player.tempGoldMagnet > 0) effects.push({emoji: "🧲", time: player.tempGoldMagnet});
 
-        if (effects.length > 0) {
-            fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
-            textAlign(LEFT, TOP);
-            textSize(10);
-            text("激活效果:", x, y);
+        let hasActiveItem = player.activeItem && player.activeItem.def;
+        if (!hasActiveItem && effects.length === 0) return;
 
+        fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
+        textAlign(LEFT, TOP);
+        textSize(10);
+
+        let offsetY = y;
+
+        if (hasActiveItem) {
+            let remainMs = player.getActiveItemCooldownRemaining ? player.getActiveItemCooldownRemaining() : 0;
+            let cdText = remainMs <= 0 ? '就绪' : `${(remainMs / 1000).toFixed(1)}s`;
+            text(`E: ${player.activeItem.def.emoji} ${player.activeItem.def.name} (${cdText})`, x, offsetY);
+            offsetY += 14;
+        }
+
+        if (effects.length > 0) {
+            text("激活效果:", x, offsetY);
             for (let i = 0; i < effects.length; i++) {
                 let effect = effects[i];
-                let yOffset = y + 12 + i * 15;
-
-                // Effect emoji and timer
+                let yOffset = offsetY + 12 + i * 15;
                 text(`${effect.emoji} ${Math.ceil(effect.time / 60)}秒`, x, yOffset);
             }
         }

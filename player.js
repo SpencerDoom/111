@@ -37,6 +37,11 @@ class Player {
         
         // Resources
         this.gold = 0;
+
+        // Item system
+        this.passiveItems = [];
+        this.activeItem = null;
+        this.familiars = [];
         
         // Visual effects
         this.hitFlashTime = 0;
@@ -74,6 +79,7 @@ class Player {
 
     update() {
         this.move();
+        this.updateFamiliars();
         this.updateProjectiles();
         this.updateTimers();
     }
@@ -150,6 +156,15 @@ class Player {
             
             if (p.isDead()) {
                 this.projectiles.splice(i, 1);
+            }
+        }
+    }
+
+    updateFamiliars() {
+        if (!this.familiars || this.familiars.length === 0) return;
+        for (let f of this.familiars) {
+            if (f && typeof f.update === 'function') {
+                f.update(this);
             }
         }
     }
@@ -322,6 +337,15 @@ class Player {
     }
 
     display() {
+        // Draw familiars
+        if (this.familiars && this.familiars.length > 0) {
+            for (let f of this.familiars) {
+                if (f && typeof f.display === 'function') {
+                    f.display();
+                }
+            }
+        }
+
         push();
         translate(this.x, this.y);
         
@@ -357,6 +381,42 @@ class Player {
         for (let projectile of this.projectiles) {
             projectile.display();
         }
+    }
+
+    // Item helpers
+    hasItem(itemId) {
+        if (!itemId) return false;
+        if (this.activeItem && this.activeItem.id === itemId) return true;
+        return Array.isArray(this.passiveItems) && this.passiveItems.includes(itemId);
+    }
+
+    useActiveItem(gameInstance) {
+        if (!this.activeItem || !this.activeItem.def || typeof this.activeItem.def.onUse !== 'function') {
+            return false;
+        }
+
+        let now = millis();
+        let cd = this.activeItem.cooldownMs || 0;
+        let last = this.activeItem.lastUsedTime || -Infinity;
+        if (now - last < cd) {
+            return false;
+        }
+
+        this.activeItem.lastUsedTime = now;
+        this.activeItem.def.onUse(this, gameInstance);
+        if (typeof playSound === 'function') {
+            playSound('pickup');
+        }
+
+        return true;
+    }
+
+    getActiveItemCooldownRemaining() {
+        if (!this.activeItem) return 0;
+        let now = millis();
+        let cd = this.activeItem.cooldownMs || 0;
+        let last = this.activeItem.lastUsedTime || -Infinity;
+        return Math.max(0, cd - (now - last));
     }
 
     // Getters for UI and other systems
