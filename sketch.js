@@ -25,7 +25,11 @@ function draw() {
 
 // Input handling
 function mousePressed() {
-    // Mouse input handled in game.handleInput()
+    // Handle game-specific mouse events
+    if (game && game.mousePressed) {
+        game.mousePressed();
+    }
+    // Mouse input also handled in game.handleInput()
     return false; // Prevent context menu for right click
 }
 

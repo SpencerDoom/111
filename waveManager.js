@@ -168,4 +168,17 @@ class WaveManager {
     isBossActive() {
         return this.isBossBattleActive && this.currentBoss && this.currentBoss.health > 0;
     }
+
+    reset() {
+        this.currentWave = 1;
+        this.enemiesPerWave = 5;
+        this.enemiesSpawnedThisWave = 0;
+        this.enemiesDefeatedThisWave = 0;
+        this.lastEnemySpawnTime = 0;
+        this.enemySpawnInterval = 2000;
+        this.waveStartTime = 0;
+        this.isBossBattleActive = false;
+        this.bossAppearsWave = 3;
+        this.currentBoss = null;
+    }
 }
