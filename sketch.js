@@ -9,29 +9,28 @@ function setup() {
     
     // Initialize the main game
     game = new Game();
-    game.initialize();
+    game.init();
     
     console.log("Emoji Roguelike Shooter initialized!");
 }
 
 function draw() {
+    // Calculate delta time (default to ~60fps)
+    let dt = 16;
+    
     // Update and draw the game
-    game.update();
-    game.draw();
+    game.update(dt);
+    game.display();
 }
 
 // Input handling
 function mousePressed() {
-    if (mouseButton === LEFT) {
-        game.handleMousePressed();
-    } else if (mouseButton === RIGHT) {
-        game.handleMousePressed2();
-        return false; // Prevent context menu
-    }
+    // Mouse input handled in game.handleInput()
+    return false; // Prevent context menu for right click
 }
 
 function keyPressed() {
-    game.handleKeyPressed();
+    game.keyPressed(key);
 }
 
 // Prevent right-click context menu
