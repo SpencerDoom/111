@@ -181,12 +181,15 @@ class Game {
     updateGameplay(deltaTime) {
         // Update total play time
         this.totalPlayTime += deltaTime;
-        
+
+        // Check if time is stopped
+        let timeStopped = millis() < this.timeStopEndTime;
+
         // Update portal timer
         if (this.portalActive) {
             this.portalActive = false; // Reset for next wave
         }
-        
+
         // Check if we should spawn next wave
         if (this.enemies.length === 0 && !this.waveManager.isBossActive()) {
             if (!this.portalActive) {
@@ -194,23 +197,22 @@ class Game {
             }
             this.portalActive = true;
         }
-        
+
         // Update time events
         this.updateTimeEvents(deltaTime);
-        
+
         // Update star field
         this.starField.update();
-        
+
         // Update player
         this.player.update();
-        
+
         // Handle input
         this.handleInput();
-        
+
         // Update enemies
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let enemy = this.enemies[i];
-            let timeStopped = millis() < this.timeStopEndTime;
             
             if (!timeStopped) {
                 enemy.update(this.player);
@@ -689,7 +691,7 @@ class Game {
         this.starField.display();
         
         // Display environment effects
-        this.environmentSystem.display(this);
+        this.environmentSystem.draw();
         
         // Display portal
         if (this.portalActive) {
@@ -732,7 +734,7 @@ class Game {
         }
         
         // Display UI
-        this.uiManager.display(this);
+        this.uiManager.drawHUD(this.player, this.waveManager);
         
         // Display game state overlays
         if (this.gameState.getState() === 'level_up') {
