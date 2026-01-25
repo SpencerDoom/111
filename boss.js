@@ -43,6 +43,9 @@ class Boss {
         // Rewards
         this.xpValue = 100;
         this.goldValue = 50;
+
+        // Death guard (avoid running onDeath multiple times in a single frame)
+        this.deathHandled = false;
     }
 
     setupVariant() {
@@ -256,7 +259,10 @@ class Boss {
     }
 
     takeDamage(amount) {
+        if (this.health <= 0) return;
+
         this.health -= amount;
+        if (this.health < 0) this.health = 0;
         
         // Visual effects
         if (typeof createExplosion === 'function') {
@@ -266,7 +272,8 @@ class Boss {
             addScreenShake(7, 12);
         }
         
-        if (this.health <= 0) {
+        if (this.health <= 0 && !this.deathHandled) {
+            this.deathHandled = true;
             this.onDeath();
         }
     }
@@ -281,6 +288,11 @@ class Boss {
         }
         if (typeof addScreenShake === 'function') {
             addScreenShake(15, 30);
+        }
+
+        // Boss drops 1-2 rare items at its death position (quality scales with wave)
+        if (typeof game !== 'undefined' && game && typeof game.dropBossItems === 'function') {
+            game.dropBossItems(this.x, this.y);
         }
         
         console.log("Boss defeated!");

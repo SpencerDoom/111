@@ -18,6 +18,9 @@ class Game {
         this.enemies = [];
         this.powerUps = [];
         
+        // Global effects
+        this.timeStopEndTime = 0;
+        
         // Game settings
         this.audioEnabled = false;
         this.audioMuted = false;
@@ -206,6 +209,7 @@ class Game {
         this.player = new Player(width / 2, height - 100);
         this.enemies = [];
         this.powerUps = [];
+        this.timeStopEndTime = 0;
         this.shopSystem = new ShopSystem();
         this.gameState.setState('start');
         
@@ -261,6 +265,9 @@ class Game {
             this.waveStartTime = millis();
             this.waveTookDamage = false;
         }
+
+        // Global time stop (items)
+        let timeStopped = millis() < (this.timeStopEndTime || 0);
         
         // Update player
         this.player.update();
@@ -272,17 +279,21 @@ class Game {
         }
         
         // Update wave manager (pause spawns while portal is active)
-        if (!this.portalPosition.active) {
+        if (!timeStopped && !this.portalPosition.active) {
             this.waveManager.update(this.enemies, this.player);
         }
         
         // Update environment system
-        this.environmentSystem.update(this);
+        if (!timeStopped) {
+            this.environmentSystem.update(this);
+        }
         
         // Update enemies
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let enemy = this.enemies[i];
-            enemy.update(this.player);
+            if (!timeStopped) {
+                enemy.update(this.player);
+            }
             
             // Remove dead or off-screen enemies
             if (enemy.isDead() || enemy.isOffScreen()) {
@@ -294,10 +305,7 @@ class Game {
                     // Track gold collection
                     this.totalGoldCollected += enemy.goldValue;
                     
-                    // Chance to drop powerup
-                    if (random() < 0.15) { // 15% chance
-                        this.powerUps.push(createRandomPowerUp(enemy.x, enemy.y));
-                    }
+                    // No item drops from regular enemies (items come from shop + boss drops)
                     
                     // Track achievements
                     this.totalKills++;
@@ -318,19 +326,9 @@ class Game {
         }
         
         // Update boss if active
-        if (this.waveManager.isBossActive()) {
+        if (!timeStopped && this.waveManager.isBossActive()) {
             let boss = this.waveManager.getBoss();
             boss.update(this.player);
-            
-            if (boss.isDead()) {
-                // Boss defeated - handled by wave manager
-                this.player.gainXP(boss.xpValue);
-                this.player.gold += boss.goldValue;
-                this.totalKills++;
-                this.bossesDefeated++;
-                this.addExplosion(boss.x, boss.y, [255, 255, 0], 20);
-                this.addScreenShake(15, 30);
-            }
         }
         
         // Update powerups
@@ -350,7 +348,9 @@ class Game {
         this.handleCollisions();
         
         // Check environmental collisions
-        this.environmentSystem.checkCollisions(this);
+        if (!timeStopped) {
+            this.environmentSystem.checkCollisions(this);
+        }
         
         // Update recent kills timer
         if (this.recentKillTimeWindow > 0) {
@@ -752,6 +752,11 @@ class Game {
             } else if (this.shopSystem && this.shopSystem.handleKeyPressed) {
                 this.shopSystem.handleKeyPressed(key, this.player, this.waveManager.getCurrentWave());
             }
+        } else if (this.gameState.isState('playing')) {
+            // Active item usage
+            if ((key === 'e' || key === 'E' || key === ' ') && this.player && this.player.useActiveItem) {
+                this.player.useActiveItem(this);
+            }
         }
     }
     
@@ -794,6 +799,16 @@ class Game {
         this.gameState.triggerLevelUp();
     }
     
+    // Item drops
+    dropBossItems(x, y) {
+        if (typeof createBossItemPickups !== 'function') return;
+        let wave = this.waveManager.getCurrentWave();
+        let pickups = createBossItemPickups(x, y, this.player, wave);
+        for (let p of pickups) {
+            this.powerUps.push(p);
+        }
+    }
+
     // Utility methods
     addExplosion(x, y, color, particleCount = 10) {
         let particles = createExplosion(x, y, color, particleCount);
