@@ -159,7 +159,7 @@ class Game {
     }
     
     init() {
-        this.gameState.changeState('playing');
+        this.gameState.setState('playing');
         this.player = new Player(width / 2, height / 2);
         this.starField = new StarField(150);
         this.portal = null;
