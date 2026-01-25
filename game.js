@@ -11,6 +11,7 @@ class Game {
         this.starField = new StarField(150);
         this.achievementSystem = new AchievementSystem();
         this.environmentSystem = new EnvironmentSystem();
+        this.shopSystem = new ShopSystem();
         
         // Game entities
         this.player = null;
@@ -205,6 +206,7 @@ class Game {
         this.player = new Player(width / 2, height - 100);
         this.enemies = [];
         this.powerUps = [];
+        this.shopSystem = new ShopSystem();
         this.gameState.setState('start');
         
         // Initialize audio system placeholder
@@ -269,8 +271,10 @@ class Game {
             return;
         }
         
-        // Update wave manager and enemies
-        this.waveManager.update(this.enemies, this.player);
+        // Update wave manager (pause spawns while portal is active)
+        if (!this.portalPosition.active) {
+            this.waveManager.update(this.enemies, this.player);
+        }
         
         // Update environment system
         this.environmentSystem.update(this);
@@ -378,7 +382,9 @@ class Game {
     }
     
     updateShop() {
-        // Handle shop interactions
+        if (this.shopSystem && this.shopSystem.update) {
+            this.shopSystem.update();
+        }
     }
     
     handleCollisions() {
@@ -534,6 +540,9 @@ class Game {
             // Check if player enters portal
             let distance = dist(this.player.x, this.player.y, this.portalPosition.x, this.portalPosition.y);
             if (distance < this.portalSize/2 + this.player.size/2) {
+                if (this.shopSystem && this.shopSystem.open) {
+                    this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
+                }
                 this.gameState.openShop();
                 this.portalPosition.active = false;
             }
@@ -654,10 +663,13 @@ class Game {
     }
     
     drawShop() {
-        // Draw shop screen
+        // Draw game in background (dimmed by shop overlay)
+        this.drawPlaying();
+
+        // Draw shop overlay
         push();
         translate(-this.screenShake.x, -this.screenShake.y);
-        this.uiManager.drawShopScreen(this.player);
+        this.uiManager.drawShopScreen(this.player, this.shopSystem, this.waveManager);
         pop();
     }
     
@@ -698,6 +710,9 @@ class Game {
             case 'playing':
                 this.player.shoot();
                 break;
+            case 'shop':
+                this.handleShopClick(mouseX, mouseY);
+                break;
             case 'gameOver':
                 this.restartGame();
                 break;
@@ -709,6 +724,24 @@ class Game {
             this.player.attemptDash();
         }
     }
+
+    handleShopClick(mx, my) {
+        if (!this.shopSystem || !this.uiManager) return;
+
+        let itemRects = this.uiManager.getShopItemRects(this.shopSystem.items.length);
+        for (let i = 0; i < itemRects.length; i++) {
+            let r = itemRects[i];
+            if (this.uiManager.isPointInRect(mx, my, r.x, r.y, r.w, r.h)) {
+                this.shopSystem.purchase(i, this.player);
+                return;
+            }
+        }
+
+        let rerollRect = this.uiManager.getShopRerollButtonRect();
+        if (this.uiManager.isPointInRect(mx, my, rerollRect.x, rerollRect.y, rerollRect.w, rerollRect.h)) {
+            this.shopSystem.reroll(this.player, this.waveManager.getCurrentWave());
+        }
+    }
     
     handleKeyPressed() {
         if (this.gameState.isState('levelUp')) {
@@ -716,6 +749,8 @@ class Game {
         } else if (this.gameState.isState('shop')) {
             if (key === 'Escape') {
                 this.gameState.continuePlaying();
+            } else if (this.shopSystem && this.shopSystem.handleKeyPressed) {
+                this.shopSystem.handleKeyPressed(key, this.player, this.waveManager.getCurrentWave());
             }
         }
     }
