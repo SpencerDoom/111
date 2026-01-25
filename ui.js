@@ -420,7 +420,10 @@ class UIManager {
             // Description
             textSize(12);
             fill(210);
-            text(item.description, rectInfo.x + 16, rectInfo.y + 42, rectInfo.w - 32, rectInfo.h - 50);
+            textWrap(WORD);
+            let maxLines = 3;
+            let lineHeight = 16;
+            text(item.description, rectInfo.x + 16, rectInfo.y + 42, rectInfo.w - 32, maxLines * lineHeight);
         }
 
         // Reroll button

@@ -89,7 +89,7 @@ class SoulFragment {
     }
 
     autoAttack() {
-        if (!this.game || !this.game.enemies) return;
+        if (!this.game || !this.game.enemies || !this.game.player) return;
 
         // 寻找最近敌人
         let nearestEnemy = null;
@@ -180,7 +180,7 @@ class MirrorClone {
     }
 
     syncShooting() {
-        if (!this.game || !this.game.enemies) return;
+        if (!this.game || !this.game.enemies || !this.game.player) return;
         if (millis() - this.lastShotTime < this.fireCooldown) return;
 
         // 寻找目标
@@ -256,6 +256,7 @@ const ITEM_DEFS = [
         },
         onProjectileHit: (player, projectile, enemy, game) => {
             if (projectile.splitLevel >= 3) return;
+            if (!game || !game.player) return;
             
             let splitCount = Math.floor(random(2, 4));
             let splitDamage = Math.floor(projectile.damage * 0.6);
@@ -288,6 +289,7 @@ const ITEM_DEFS = [
         onProjectileHit: (player, projectile, enemy, game) => {
             setTimeout(() => {
                 if (!enemy.isDead()) {
+                    if (!game || !game.player) return;
                     let angle = atan2(enemy.y - projectile.y, enemy.x - projectile.x);
                     let echoProjectile = new Projectile(
                         projectile.x, projectile.y, angle, 'player', 
@@ -310,6 +312,7 @@ const ITEM_DEFS = [
         tags: ['mechanic_soul'],
         cooldownMs: 45000,
         onUse: (player, game) => {
+            if (!game) return;
             for (let i = 0; i < 5; i++) {
                 let soul = new SoulFragment(player, game);
                 game.soulFragments.push(soul);
@@ -642,6 +645,7 @@ const ITEM_DEFS = [
         tags: ['mechanic_clone'],
         apply: (player, game) => {
             player.hasMirrorClone = true;
+            if (!game) return;
             if (!player.mirrorClone || !player.mirrorClone.active) {
                 player.mirrorClone = new MirrorClone(player, game);
                 game.mirrorClones.push(player.mirrorClone);
@@ -708,21 +712,41 @@ function grantItemToPlayer(player, itemId, gameInstance = null) {
         def.apply(player, gameInstance);
     }
 
-    // 注册事件监听器
-    if (def.onKill) {
-        player.addEventListener('onKill', (enemy) => def.onKill(player, enemy, gameInstance));
+    // 注册事件监听器（避免重复注册）
+    if (def.onKill && !player._itemEventListeners?.[def.id]?.onKill) {
+        player._itemEventListeners = player._itemEventListeners || {};
+        player._itemEventListeners[def.id] = player._itemEventListeners[def.id] || {};
+        let callback = (enemy) => def.onKill(player, enemy, gameInstance);
+        player._itemEventListeners[def.id].onKill = callback;
+        player.addEventListener('onKill', callback);
     }
-    if (def.onCrit) {
-        player.addEventListener('onCrit', (enemy) => def.onCrit(player, enemy, gameInstance));
+    if (def.onCrit && !player._itemEventListeners?.[def.id]?.onCrit) {
+        player._itemEventListeners = player._itemEventListeners || {};
+        player._itemEventListeners[def.id] = player._itemEventListeners[def.id] || {};
+        let callback = (enemy) => def.onCrit(player, enemy, gameInstance);
+        player._itemEventListeners[def.id].onCrit = callback;
+        player.addEventListener('onCrit', callback);
     }
-    if (def.onDamage) {
-        player.addEventListener('onDamage', (damage) => def.onDamage(player, damage, gameInstance));
+    if (def.onDamage && !player._itemEventListeners?.[def.id]?.onDamage) {
+        player._itemEventListeners = player._itemEventListeners || {};
+        player._itemEventListeners[def.id] = player._itemEventListeners[def.id] || {};
+        let callback = (damage) => def.onDamage(player, damage, gameInstance);
+        player._itemEventListeners[def.id].onDamage = callback;
+        player.addEventListener('onDamage', callback);
     }
-    if (def.onGoldCollected) {
-        player.addEventListener('onGoldCollected', (amount) => def.onGoldCollected(player, amount, gameInstance));
+    if (def.onGoldCollected && !player._itemEventListeners?.[def.id]?.onGoldCollected) {
+        player._itemEventListeners = player._itemEventListeners || {};
+        player._itemEventListeners[def.id] = player._itemEventListeners[def.id] || {};
+        let callback = (amount) => def.onGoldCollected(player, amount, gameInstance);
+        player._itemEventListeners[def.id].onGoldCollected = callback;
+        player.addEventListener('onGoldCollected', callback);
     }
-    if (def.onProjectileHit) {
-        player.addEventListener('onProjectileHit', (projectile, enemy) => def.onProjectileHit(player, projectile, enemy, gameInstance));
+    if (def.onProjectileHit && !player._itemEventListeners?.[def.id]?.onProjectileHit) {
+        player._itemEventListeners = player._itemEventListeners || {};
+        player._itemEventListeners[def.id] = player._itemEventListeners[def.id] || {};
+        let callback = (projectile, enemy) => def.onProjectileHit(player, projectile, enemy, gameInstance);
+        player._itemEventListeners[def.id].onProjectileHit = callback;
+        player.addEventListener('onProjectileHit', callback);
     }
 
     return true;

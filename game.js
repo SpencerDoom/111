@@ -225,11 +225,9 @@ class Game {
         // Update total play time
         this.totalPlayTime += deltaTime;
 
-        // Check if we should spawn next wave
-        if (this.enemies.length === 0 && !this.waveManager.isBossActive() && this.waveManager.enemiesSpawnedThisWave > 0) {
-            if (!this.portalActive) {
-                this.spawnPortal();
-            }
+        // Check if we should spawn portal (only after boss is defeated)
+        if (this.enemies.length === 0 && this.waveManager.isBossJustDefeated() && !this.portalActive) {
+            this.spawnPortal();
             this.portalActive = true;
         }
 
@@ -244,6 +242,12 @@ class Game {
         
         // Update player
         this.player.update();
+
+        // Check if player is dead
+        if (this.player.isDead()) {
+            this.gameState.gameOver();
+            return;
+        }
 
         // Handle input
         this.handleInput();
@@ -460,7 +464,7 @@ class Game {
             let portalRadius = 30;
             let distance = dist(portalX, portalY, this.player.x, this.player.y);
             
-            if (distance < portalRadius + this.player.radius) {
+            if (distance < portalRadius + this.player.size / 2) {
                 this.enterPortal();
             }
         }
@@ -949,6 +953,8 @@ class Game {
         } else if (this.gameState.getState() === 'shop') {
             if (keyValue === 'Escape') {
                 this.gameState.setState('playing');
+                // Start next wave after leaving shop
+                this.waveManager.startNextWave();
             } else {
                 this.shopSystem.handleKeyPressed(keyValue, this.player, this.waveManager.getCurrentWave());
             }

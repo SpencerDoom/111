@@ -259,7 +259,14 @@ class ShopSystem {
             text(item.name, x + itemWidth / 2, y + 40);
 
             textSize(10);
-            text(item.description, x + itemWidth / 2, y + 60, itemWidth - 20, itemHeight - 40);
+            textWrap(WORD);
+            let maxLines = 3;
+            let lineHeight = 12;
+            let descriptionY = y + 60;
+            let descriptionHeight = maxLines * lineHeight;
+            
+            // 使用text()的自动换行功能，并限制显示区域
+            text(item.description, x + itemWidth / 2, descriptionY, itemWidth - 24, descriptionHeight);
 
             // Price
             textSize(12);

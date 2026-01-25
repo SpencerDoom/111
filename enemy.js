@@ -508,11 +508,17 @@ class BomberEnemy extends Enemy {
         let explosionDuration = 1000; // 1 second explosion animation
         if (millis() - this.explosionStartTime > explosionDuration) {
             // Damage player if in explosion radius
-            let distance = dist(this.x, this.y, game.player.x, game.player.y);
-            if (distance < this.explosionRadius) {
-                game.player.takeDamage(this.projectileDamage + 2);
-                game.addExplosion(this.x, this.y, [255, 165, 0], 15);
-                game.addScreenShake(10, 20);
+            if (typeof game !== 'undefined' && game && game.player) {
+                let distance = dist(this.x, this.y, game.player.x, game.player.y);
+                if (distance < this.explosionRadius) {
+                    game.player.takeDamage(this.projectileDamage + 2);
+                    if (game.addExplosion) {
+                        game.addExplosion(this.x, this.y, [255, 165, 0], 15);
+                    }
+                    if (game.addScreenShake) {
+                        game.addScreenShake(10, 20);
+                    }
+                }
             }
             this.health = 0; // Kill self after explosion
         }

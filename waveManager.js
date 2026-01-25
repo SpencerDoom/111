@@ -11,6 +11,7 @@ class WaveManager {
         this.isBossBattleActive = false;
         this.bossAppearsWave = 3;
         this.currentBoss = null;
+        this.bossJustDefeated = false;
     }
 
     update(enemies, player) {
@@ -101,6 +102,7 @@ class WaveManager {
         this.enemiesSpawnedThisWave = 0;
         this.enemiesDefeatedThisWave = 0;
         this.waveStartTime = millis();
+        this.bossJustDefeated = false;
         
         // Decrease spawn interval slightly each wave
         this.enemySpawnInterval = Math.max(1000, 2000 - (this.currentWave * 50));
@@ -119,6 +121,7 @@ class WaveManager {
 
         let defeatedBoss = this.currentBoss;
         this.isBossBattleActive = false;
+        this.bossJustDefeated = true;
 
         // Boss rewards
         player.gainXP(defeatedBoss.xpValue || (50 + (this.currentWave * 10)));
@@ -169,6 +172,10 @@ class WaveManager {
         return this.isBossBattleActive && this.currentBoss && this.currentBoss.health > 0;
     }
 
+    isBossJustDefeated() {
+        return this.bossJustDefeated;
+    }
+
     reset() {
         this.currentWave = 1;
         this.enemiesPerWave = 5;
@@ -180,5 +187,6 @@ class WaveManager {
         this.isBossBattleActive = false;
         this.bossAppearsWave = 3;
         this.currentBoss = null;
+        this.bossJustDefeated = false;
     }
 }

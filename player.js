@@ -746,35 +746,6 @@ class Player {
         return Array.isArray(this.passiveItems) && this.passiveItems.includes(itemId);
     }
 
-    useActiveItem(gameInstance) {
-        if (!this.activeItem || !this.activeItem.def || typeof this.activeItem.def.onUse !== 'function') {
-            return false;
-        }
-
-        let now = millis();
-        let cd = this.activeItem.cooldownMs || 0;
-        let last = this.activeItem.lastUsedTime || -Infinity;
-        if (now - last < cd) {
-            return false;
-        }
-
-        this.activeItem.lastUsedTime = now;
-        this.activeItem.def.onUse(this, gameInstance);
-        if (typeof playSound === 'function') {
-            playSound('pickup');
-        }
-
-        return true;
-    }
-
-    getActiveItemCooldownRemaining() {
-        if (!this.activeItem) return 0;
-        let now = millis();
-        let cd = this.activeItem.cooldownMs || 0;
-        let last = this.activeItem.lastUsedTime || -Infinity;
-        return Math.max(0, cd - (now - last));
-    }
-
     // Getters for UI and other systems
     getHealthPercentage() {
         return this.health / this.maxHealth;

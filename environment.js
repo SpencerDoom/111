@@ -160,66 +160,80 @@ class EnvironmentSystem {
     }
     
     checkCollisions(game) {
+        if (!game || !game.player) return;
+        
         // Check asteroid collisions with player
         for (let asteroid of this.asteroids) {
             if (checkCircleCollision(asteroid, game.player)) {
                 game.player.takeDamage(1);
                 asteroid.health -= 2;
-                game.addScreenShake(8, 15);
+                if (game.addScreenShake) {
+                    game.addScreenShake(8, 15);
+                }
                 
                 if (asteroid.health <= 0) {
                     let index = this.asteroids.indexOf(asteroid);
                     this.asteroids.splice(index, 1);
-                    game.addExplosion(asteroid.x, asteroid.y, [139, 69, 19], 8);
+                    if (game.addExplosion) {
+                        game.addExplosion(asteroid.x, asteroid.y, [139, 69, 19], 8);
+                    }
                 }
             }
             
             // Check asteroid collisions with enemies
-            for (let i = game.enemies.length - 1; i >= 0; i--) {
-                let enemy = game.enemies[i];
-                if (checkCircleCollision(asteroid, enemy)) {
-                    enemy.takeDamage(1);
-                    asteroid.health -= 1;
-                    
-                    if (enemy.isDead()) {
-                        game.enemies.splice(i, 1);
-                        game.totalKills++;
-                    }
-                    
-                    if (asteroid.health <= 0) {
-                        let index = this.asteroids.indexOf(asteroid);
-                        this.asteroids.splice(index, 1);
-                        game.addExplosion(asteroid.x, asteroid.y, [139, 69, 19], 8);
-                        break;
+            if (game.enemies) {
+                for (let i = game.enemies.length - 1; i >= 0; i--) {
+                    let enemy = game.enemies[i];
+                    if (checkCircleCollision(asteroid, enemy)) {
+                        enemy.takeDamage(1);
+                        asteroid.health -= 1;
+                        
+                        if (enemy.isDead()) {
+                            game.enemies.splice(i, 1);
+                            game.totalKills++;
+                        }
+                        
+                        if (asteroid.health <= 0) {
+                            let index = this.asteroids.indexOf(asteroid);
+                            this.asteroids.splice(index, 1);
+                            game.addExplosion(asteroid.x, asteroid.y, [139, 69, 19], 8);
+                            break;
+                        }
                     }
                 }
             }
         }
         
         // Check energy field effects
-        for (let field of this.energyFields) {
-            field.checkEffect(game.player);
-            for (let enemy of game.enemies) {
-                field.checkEffect(enemy);
+        if (game.enemies) {
+            for (let field of this.energyFields) {
+                field.checkEffect(game.player);
+                for (let enemy of game.enemies) {
+                    field.checkEffect(enemy);
+                }
             }
         }
         
         // Check time field effect
         if (this.timeField) {
             this.timeField.checkEffect(game.player);
-            for (let enemy of game.enemies) {
-                this.timeField.checkEffect(enemy);
+            if (game.enemies) {
+                for (let enemy of game.enemies) {
+                    this.timeField.checkEffect(enemy);
+                }
             }
         }
-        
+
         // Check gravity well effects
-        for (let well of this.gravityWells) {
-            well.applyGravity(game.player);
-            for (let enemy of game.enemies) {
-                well.applyGravity(enemy);
-            }
-            for (let projectile of game.player.projectiles) {
-                well.applyGravity(projectile);
+        if (game.enemies) {
+            for (let well of this.gravityWells) {
+                well.applyGravity(game.player);
+                for (let enemy of game.enemies) {
+                    well.applyGravity(enemy);
+                }
+                for (let projectile of game.player.projectiles) {
+                    well.applyGravity(projectile);
+                }
             }
         }
     }

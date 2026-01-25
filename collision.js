@@ -198,9 +198,9 @@ function handleProjectileCollision(projectile, target, game) {
     }
     
     // Handle special projectile effects
-    if (projectile.type === 'player') {
+    if (projectile.type === 'player' && game && game.player) {
         // Player projectile hit enemy
-        if (target.poisonEffect && !game.player.poisonImmune) {
+        if (target.poisonEffect) {
             // Apply poison effect
             target.poisoned = true;
             target.poisonEndTime = millis() + 3000; // 3 seconds
@@ -232,17 +232,19 @@ function handleProjectileCollision(projectile, target, game) {
             let explosionDamage = Math.floor(actualDamage * 0.5);
             
             // Damage regular enemies
-            for (let enemy of game.enemies) {
-                if (enemy !== target) {
-                    let distance = dist(projectile.x, projectile.y, enemy.x, enemy.y);
-                    if (distance < explosionRadius) {
-                        enemy.takeDamage(explosionDamage);
+            if (game.enemies) {
+                for (let enemy of game.enemies) {
+                    if (enemy !== target) {
+                        let distance = dist(projectile.x, projectile.y, enemy.x, enemy.y);
+                        if (distance < explosionRadius) {
+                            enemy.takeDamage(explosionDamage);
+                        }
                     }
                 }
             }
             
             // Damage boss
-            if (game.waveManager.isBossActive()) {
+            if (game.waveManager && game.waveManager.isBossActive()) {
                 let boss = game.waveManager.getBoss();
                 if (boss !== target) {
                     let distance = dist(projectile.x, projectile.y, boss.x, boss.y);
@@ -252,7 +254,9 @@ function handleProjectileCollision(projectile, target, game) {
                 }
             }
             
-            game.addScreenShake(8, 15);
+            if (game.addScreenShake) {
+                game.addScreenShake(8, 15);
+            }
         }
         
         // Handle piercing
@@ -265,9 +269,11 @@ function handleProjectileCollision(projectile, target, game) {
     } else {
         // Enemy projectile hit player
         if (projectile.poisonEffect) {
-            game.player.poisoned = true;
-            game.player.poisonEndTime = millis() + 3000;
-            game.player.poisonDamage = projectile.damage;
+            if (typeof game !== 'undefined' && game && game.player) {
+                game.player.poisoned = true;
+                game.player.poisonEndTime = millis() + 3000;
+                game.player.poisonDamage = projectile.damage;
+            }
         }
         return true; // Remove enemy projectile on hit
     }
