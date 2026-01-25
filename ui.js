@@ -18,17 +18,28 @@ class UIManager {
         // Health bar
         this.drawHealthBar(player, 20, 20);
         
+        // Shield bar (if player has shield)
+        if (player.shield && player.shield > 0) {
+            this.drawShieldBar(player, 20, 45);
+        }
+        
         // XP bar
-        this.drawXPBar(player, 20, 50);
+        this.drawXPBar(player, 20, 75);
         
         // Dash cooldown
-        this.drawDashCooldown(player, 20, 80);
+        this.drawDashCooldown(player, 20, 105);
+        
+        // Active effects
+        this.drawActiveEffects(player, 20, 130);
         
         // Wave info
         this.drawWaveInfo(waveManager, width - 200, 20);
         
         // Resources (Gold, Level)
         this.drawResources(player, width - 200, 60);
+        
+        // Achievement progress
+        this.drawAchievementProgress(game.achievementSystem, width - 200, 100);
         
         pop();
     }
@@ -108,6 +119,88 @@ class UIManager {
         textSize(8);
         text("⚡ Dash", x + 5, y + barHeight/2);
     }
+    
+    drawShieldBar(player, x, y) {
+        let barWidth = 150;
+        let barHeight = 8;
+        
+        // Background
+        fill(50);
+        rect(x, y, barWidth, barHeight);
+        
+        // Shield fill
+        let shieldWidth = map(player.shield, 0, player.maxShield, 0, barWidth);
+        fill(this.colorScheme.accent[0], this.colorScheme.accent[1], this.colorScheme.accent[2]);
+        rect(x, y, shieldWidth, barHeight);
+        
+        // Border
+        noFill();
+        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        rect(x, y, barWidth, barHeight);
+        
+        // Text
+        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        textAlign(LEFT, CENTER);
+        textSize(8);
+        text(`🛡️ Shield: ${player.shield}/${player.maxShield}`, x + 5, y + barHeight/2);
+    }
+    
+    drawActiveEffects(player, x, y) {
+        let effects = [];
+        
+        if (player.tempSpeedBoost > 0) effects.push({emoji: "⚡", time: player.tempSpeedBoost});
+        if (player.tempDamageBoost > 0) effects.push({emoji: "🔥", time: player.tempDamageBoost});
+        if (player.tempMultiShot > 0) effects.push({emoji: "🔱", time: player.tempMultiShot});
+        if (player.tempPiercing > 0) effects.push({emoji: "🎯", time: player.tempPiercing});
+        if (player.tempCritChance > 0) effects.push({emoji: "💢", time: player.tempCritChance});
+        if (player.tempTimeSlow > 0) effects.push({emoji: "⏰", time: player.tempTimeSlow});
+        if (player.tempVampiric > 0) effects.push({emoji: "🩸", time: player.tempVampiric});
+        if (player.tempXPMagnet > 0) effects.push({emoji: "🌟", time: player.tempXPMagnet});
+        if (player.tempGoldMagnet > 0) effects.push({emoji: "🧲", time: player.tempGoldMagnet});
+        
+        if (effects.length > 0) {
+            fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+            textAlign(LEFT, TOP);
+            textSize(10);
+            text("Active Effects:", x, y);
+            
+            for (let i = 0; i < effects.length; i++) {
+                let effect = effects[i];
+                let yOffset = y + 12 + i * 15;
+                
+                // Effect emoji and timer
+                text(`${effect.emoji} ${Math.ceil(effect.time / 60)}s`, x, yOffset);
+            }
+        }
+    }
+    
+    drawAchievementProgress(achievementSystem, x, y) {
+        let unlocked = achievementSystem.getUnlockedCount();
+        let total = achievementSystem.getTotalCount();
+        
+        fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        textAlign(RIGHT, TOP);
+        textSize(12);
+        text(`🏆 ${unlocked}/${total}`, x, y);
+        
+        // Progress bar
+        let barWidth = 100;
+        let barHeight = 6;
+        let progress = unlocked / total;
+        
+        // Background
+        fill(50);
+        rect(x - barWidth, y + 20, barWidth, barHeight);
+        
+        // Progress fill
+        fill(this.colorScheme.gold[0], this.colorScheme.gold[1], this.colorScheme.gold[2]);
+        rect(x - barWidth, y + 20, barWidth * progress, barHeight);
+        
+        // Border
+        noFill();
+        stroke(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
+        rect(x - barWidth, y + 20, barWidth, barHeight);
+    }
 
     drawWaveInfo(waveManager, x, y) {
         fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
@@ -146,17 +239,23 @@ class UIManager {
         textSize(48);
         text("🚀 EMOJI ROGUELIKE SHOOTER 🚀", width/2, height/2 - 100);
         
+        // Subtitle with new features
+        fill(this.colorScheme.gold[0], this.colorScheme.gold[1], this.colorScheme.gold[2]);
+        textSize(16);
+        text("Now with 4 New Enemy Types, Enhanced Weapons, and Achievements!", width/2, height/2 - 60);
+        
         // Instructions
         fill(this.colorScheme.text[0], this.colorScheme.text[1], this.colorScheme.text[2]);
         textSize(18);
         text("WASD to move", width/2, height/2 - 30);
         text("Mouse to aim and click to shoot", width/2, height/2);
         text("Right click to dash", width/2, height/2 + 30);
+        text("Collect power-ups and unlock achievements!", width/2, height/2 + 60);
         
         // Start button
         textSize(24);
         fill(this.colorScheme.success[0], this.colorScheme.success[1], this.colorScheme.success[2]);
-        text("Click to Start", width/2, height/2 + 80);
+        text("Click to Start", width/2, height/2 + 100);
         
         pop();
     }

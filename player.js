@@ -45,7 +45,31 @@ class Player {
         // Temporary effects
         this.tempSpeedBoost = 0;
         this.tempDamageBoost = 0;
+        this.tempMultiShot = 0;
+        this.tempPiercing = 0;
+        this.tempCritChance = 0;
+        this.tempTimeSlow = 0;
+        this.tempVampiric = 0;
+        this.tempXPMagnet = 0;
+        this.tempGoldMagnet = 0;
         this.invulnerableTime = 0;
+        
+        // Weapon properties (for talents and power-ups)
+        this.piercingCount = 0; // Number of enemies projectiles can pierce through
+        this.spreadShot = false; // Shoot in spread pattern
+        this.projectileCount = 1; // Number of projectiles per shot
+        this.explosiveShots = false; // Projectiles explode on hit
+        this.knockbackForce = 0; // Knockback force for projectiles
+        this.critChance = 0; // Base critical chance (0-1)
+        this.vampiric = false; // Heal on kill
+        this.goldMagnet = false; // Auto-attract gold
+        this.regenRate = 0; // Health regeneration rate (ms)
+        this.lastRegenTime = 0;
+        
+        // Shield system
+        this.shield = 0; // Current shield points
+        this.maxShield = 0; // Maximum shield points
+        this.size = 30; // Hitbox size
     }
 
     update() {
@@ -62,17 +86,60 @@ class Player {
         
         // Update temporary effects
         if (this.tempSpeedBoost > 0) {
-            this.tempSpeedBoost -= 0.5;
+            this.tempSpeedBoost -= 1;
             if (this.tempSpeedBoost < 0) this.tempSpeedBoost = 0;
         }
         
         if (this.tempDamageBoost > 0) {
-            this.tempDamageBoost -= 0.5;
+            this.tempDamageBoost -= 1;
             if (this.tempDamageBoost < 0) this.tempDamageBoost = 0;
+        }
+        
+        if (this.tempMultiShot > 0) {
+            this.tempMultiShot -= 1;
+            if (this.tempMultiShot < 0) this.tempMultiShot = 0;
+        }
+        
+        if (this.tempPiercing > 0) {
+            this.tempPiercing -= 1;
+            if (this.tempPiercing < 0) this.tempPiercing = 0;
+        }
+        
+        if (this.tempCritChance > 0) {
+            this.tempCritChance -= 1;
+            if (this.tempCritChance < 0) this.tempCritChance = 0;
+        }
+        
+        if (this.tempTimeSlow > 0) {
+            this.tempTimeSlow -= 1;
+            if (this.tempTimeSlow < 0) this.tempTimeSlow = 0;
+        }
+        
+        if (this.tempVampiric > 0) {
+            this.tempVampiric -= 1;
+            if (this.tempVampiric < 0) this.tempVampiric = 0;
+        }
+        
+        if (this.tempXPMagnet > 0) {
+            this.tempXPMagnet -= 1;
+            if (this.tempXPMagnet < 0) this.tempXPMagnet = 0;
+        }
+        
+        if (this.tempGoldMagnet > 0) {
+            this.tempGoldMagnet -= 1;
+            if (this.tempGoldMagnet < 0) this.tempGoldMagnet = 0;
         }
         
         if (this.invulnerableTime > 0) {
             this.invulnerableTime -= 16; // Assume 60fps
+        }
+        
+        // Health regeneration
+        if (this.regenRate > 0 && millis() - this.lastRegenTime > this.regenRate) {
+            if (this.health < this.maxHealth) {
+                this.health += 1;
+                this.lastRegenTime = millis();
+            }
         }
     }
 
@@ -136,7 +203,46 @@ class Player {
         if (millis() - this.lastShotTime > this.shotCooldown) {
             let angle = atan2(mouseY - this.y, mouseX - this.x);
             let damage = this.projectileDamage + this.tempDamageBoost;
-            this.projectiles.push(new Projectile(this.x, this.y, angle, 'player', damage));
+            
+            // Calculate current projectile count and properties
+            let currentProjectileCount = this.projectileCount;
+            if (this.tempMultiShot > 0) {
+                currentProjectileCount += 2;
+            }
+            
+            let currentPiercingCount = this.piercingCount;
+            if (this.tempPiercing > 0) {
+                currentPiercingCount += 2;
+            }
+            
+            let currentCritChance = this.critChance + this.tempCritChance;
+            
+            // Shoot projectiles
+            if (this.spreadShot) {
+                // Spread shot - 3 bullets in a spread pattern
+                for (let i = -1; i <= 1; i++) {
+                    let spreadAngle = angle + (i * PI / 12);
+                    let projectile = new Projectile(this.x, this.y, spreadAngle, 'player', damage);
+                    projectile.pierceCount = currentPiercingCount;
+                    projectile.isCritical = random() < currentCritChance;
+                    projectile.knockbackForce = this.knockbackForce;
+                    this.projectiles.push(projectile);
+                }
+            } else {
+                // Regular shot or multi shot
+                let angleStep = TWO_PI / currentProjectileCount;
+                let startAngle = angle - (angleStep * (currentProjectileCount - 1)) / 2;
+                
+                for (let i = 0; i < currentProjectileCount; i++) {
+                    let projectileAngle = startAngle + (i * angleStep);
+                    let projectile = new Projectile(this.x, this.y, projectileAngle, 'player', damage);
+                    projectile.pierceCount = currentPiercingCount;
+                    projectile.isCritical = random() < currentCritChance;
+                    projectile.knockbackForce = this.knockbackForce;
+                    this.projectiles.push(projectile);
+                }
+            }
+            
             this.lastShotTime = millis();
             
             // Play shoot sound if audio system exists
@@ -163,16 +269,25 @@ class Player {
     takeDamage(amount) {
         if (this.invulnerableTime > 0) return; // Invulnerable
         
-        this.health -= amount;
-        this.hitFlashTime = millis();
-        this.invulnerableTime = 500; // 500ms invulnerability after taking damage
-        
-        // Visual effects
-        if (typeof addScreenShake === 'function') {
-            addScreenShake(5, 10);
-        }
-        if (typeof playSound === 'function') {
-            playSound('hit');
+        // Check if player has shield
+        if (this.shield > 0) {
+            this.shield -= 1;
+            // Shield absorbs damage, no health loss
+            if (typeof addScreenShake === 'function') {
+                addScreenShake(3, 8);
+            }
+        } else {
+            this.health -= amount;
+            this.hitFlashTime = millis();
+            this.invulnerableTime = 500; // 500ms invulnerability after taking damage
+            
+            // Visual effects
+            if (typeof addScreenShake === 'function') {
+                addScreenShake(5, 10);
+            }
+            if (typeof playSound === 'function') {
+                playSound('hit');
+            }
         }
     }
 
