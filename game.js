@@ -23,155 +23,155 @@ class Game {
         
         // Talent system
         this.allTalents = [
-            { 
-                id: 'hp_boost', 
-                name: "+2 Max Health", 
-                description: "Increase maximum health by 2 and heal to full.", 
-                apply: (p) => { 
-                    p.maxHealth += 2; 
-                    p.health = p.maxHealth; 
-                } 
+            {
+                id: 'hp_boost',
+                name: "+2 最大生命值",
+                description: "增加2点最大生命值并恢复满血。",
+                apply: (p) => {
+                    p.maxHealth += 2;
+                    p.health = p.maxHealth;
+                }
             },
-            { 
-                id: 'damage_boost', 
-                name: "+1 Damage", 
-                description: "Increase projectile damage by 1.", 
-                apply: (p) => { 
-                    p.projectileDamage += 1; 
-                } 
+            {
+                id: 'damage_boost',
+                name: "+1 伤害",
+                description: "增加1点投射物伤害。",
+                apply: (p) => {
+                    p.projectileDamage += 1;
+                }
             },
-            { 
-                id: 'speed_boost', 
-                name: "+Speed", 
-                description: "Increase movement speed and acceleration.", 
-                apply: (p) => { 
-                    p.maxSpeed += 0.5; 
-                    p.acceleration += 0.1; 
-                } 
+            {
+                id: 'speed_boost',
+                name: "+速度",
+                description: "增加移动速度和加速度。",
+                apply: (p) => {
+                    p.maxSpeed += 0.5;
+                    p.acceleration += 0.1;
+                }
             },
-            { 
-                id: 'fire_rate', 
-                name: "Faster Shooting", 
-                description: "Reduce shooting cooldown by 50ms.", 
-                apply: (p) => { 
-                    p.shotCooldown = Math.max(100, p.shotCooldown - 50); 
-                } 
+            {
+                id: 'fire_rate',
+                name: "快速射击",
+                description: "减少射击冷却时间50毫秒。",
+                apply: (p) => {
+                    p.shotCooldown = Math.max(100, p.shotCooldown - 50);
+                }
             },
-            { 
-                id: 'dash_cooldown', 
-                name: "Dash Mastery", 
-                description: "Reduce dash cooldown by 500ms.", 
-                apply: (p) => { 
-                    p.dashCooldown = Math.max(500, p.dashCooldown - 500); 
-                } 
+            {
+                id: 'dash_cooldown',
+                name: "冲刺精通",
+                description: "减少冲刺冷却时间500毫秒。",
+                apply: (p) => {
+                    p.dashCooldown = Math.max(500, p.dashCooldown - 500);
+                }
             },
             // New talents
-            { 
-                id: 'piercing_shots', 
-                name: "Piercing Shots", 
-                description: "Projectiles pierce through 2 additional enemies.", 
-                apply: (p) => { 
-                    p.piercingCount = (p.piercingCount || 0) + 2; 
-                } 
+            {
+                id: 'piercing_shots',
+                name: "穿透射击",
+                description: "投射物可穿透2个额外敌人。",
+                apply: (p) => {
+                    p.piercingCount = (p.piercingCount || 0) + 2;
+                }
             },
-            { 
-                id: 'spread_shot', 
-                name: "Spread Shot", 
-                description: "Shoot 3 bullets in a spread pattern.", 
-                apply: (p) => { 
-                    p.spreadShot = true; 
-                } 
+            {
+                id: 'spread_shot',
+                name: "散射",
+                description: "以散射模式发射3发子弹。",
+                apply: (p) => {
+                    p.spreadShot = true;
+                }
             },
-            { 
-                id: 'auto_heal', 
-                name: "Regeneration", 
-                description: "Regenerate 1 health every 5 seconds.", 
-                apply: (p) => { 
+            {
+                id: 'auto_heal',
+                name: "再生",
+                description: "每5秒恢复1点生命值。",
+                apply: (p) => {
                     p.regenRate = 2000; // Every 2 seconds
                     p.lastRegenTime = millis();
-                } 
+                }
             },
-            { 
-                id: 'shield', 
-                name: "Energy Shield", 
-                description: "Gain a shield that blocks 3 hits.", 
-                apply: (p) => { 
-                    p.shield = (p.shield || 0) + 3; 
-                    p.maxShield = p.shield; 
-                } 
+            {
+                id: 'shield',
+                name: "能量护盾",
+                description: "获得可阻挡3次攻击的护盾。",
+                apply: (p) => {
+                    p.shield = (p.shield || 0) + 3;
+                    p.maxShield = p.shield;
+                }
             },
-            { 
-                id: 'explosive_rounds', 
-                name: "Explosive Rounds", 
-                description: "Projectiles explode on hit, dealing area damage.", 
-                apply: (p) => { 
-                    p.explosiveShots = true; 
-                } 
+            {
+                id: 'explosive_rounds',
+                name: "爆炸弹",
+                description: "投射物击中时爆炸，造成范围伤害。",
+                apply: (p) => {
+                    p.explosiveShots = true;
+                }
             },
-            { 
-                id: 'multi_shot', 
-                name: "Multi Shot", 
-                description: "Shoot 2 additional projectiles.", 
-                apply: (p) => { 
-                    p.projectileCount = (p.projectileCount || 1) + 2; 
-                } 
+            {
+                id: 'multi_shot',
+                name: "多重射击",
+                description: "额外发射2发投射物。",
+                apply: (p) => {
+                    p.projectileCount = (p.projectileCount || 1) + 2;
+                }
             },
-            { 
-                id: 'vampirism', 
-                name: "Vampirism", 
-                description: "Heal 1 health for each enemy defeated.", 
-                apply: (p) => { 
-                    p.vampiric = true; 
-                } 
+            {
+                id: 'vampirism',
+                name: "吸血",
+                description: "每击败一个敌人恢复1点生命值。",
+                apply: (p) => {
+                    p.vampiric = true;
+                }
             },
-            { 
-                id: 'gold_magnet', 
-                name: "Gold Magnet", 
-                description: "Attract gold automatically.", 
-                apply: (p) => { 
-                    p.goldMagnet = true; 
-                } 
+            {
+                id: 'gold_magnet',
+                name: "金币磁铁",
+                description: "自动吸引金币。",
+                apply: (p) => {
+                    p.goldMagnet = true;
+                }
             },
-            { 
-                id: 'double_jump', 
-                name: "Double Dash", 
-                description: "Dash distance doubled and faster recharge.", 
-                apply: (p) => { 
-                    p.dashDistance *= 2; 
-                    p.dashCooldown = Math.max(300, p.dashCooldown - 200); 
-                } 
+            {
+                id: 'double_jump',
+                name: "双倍冲刺",
+                description: "冲刺距离翻倍且充能更快。",
+                apply: (p) => {
+                    p.dashDistance *= 2;
+                    p.dashCooldown = Math.max(300, p.dashCooldown - 200);
+                }
             },
-            { 
-                id: 'crit_chance', 
-                name: "Critical Strike", 
-                description: "20% chance to deal double damage.", 
-                apply: (p) => { 
-                    p.critChance = (p.critChance || 0) + 0.2; 
-                } 
+            {
+                id: 'crit_chance',
+                name: "暴击",
+                description: "20%几率造成双倍伤害。",
+                apply: (p) => {
+                    p.critChance = (p.critChance || 0) + 0.2;
+                }
             },
-            { 
-                id: 'size_reduction', 
-                name: "Agility Training", 
-                description: "Reduce hitbox size by 20%.", 
-                apply: (p) => { 
-                    p.size *= 0.8; 
-                } 
+            {
+                id: 'size_reduction',
+                name: "敏捷训练",
+                description: "减少碰撞体积20%。",
+                apply: (p) => {
+                    p.size *= 0.8;
+                }
             },
-            { 
-                id: 'poison_resistance', 
-                name: "Poison Resistance", 
-                description: "Immune to poison damage.", 
-                apply: (p) => { 
-                    p.poisonImmune = true; 
-                } 
+            {
+                id: 'poison_resistance',
+                name: "毒素抗性",
+                description: "免疫毒素伤害。",
+                apply: (p) => {
+                    p.poisonImmune = true;
+                }
             },
-            { 
-                id: 'knockback', 
-                name: "Knockback Force", 
-                description: "Projectiles push enemies back.", 
-                apply: (p) => { 
-                    p.knockbackForce = (p.knockbackForce || 0) + 5; 
-                } 
+            {
+                id: 'knockback',
+                name: "击退力",
+                description: "投射物击中敌人时将其击退。",
+                apply: (p) => {
+                    p.knockbackForce = (p.knockbackForce || 0) + 5;
+                }
             }
         ];
         

@@ -4,96 +4,96 @@ class AchievementSystem {
         this.achievements = [
             {
                 id: 'first_kill',
-                name: 'First Blood',
-                description: 'Defeat your first enemy',
+                name: '首杀',
+                description: '击败第一个敌人',
                 icon: '🔫',
                 unlocked: false,
                 condition: (game) => game.totalKills >= 1
             },
             {
                 id: 'survivor',
-                name: 'Survivor',
-                description: 'Survive for 2 minutes',
+                name: '幸存者',
+                description: '生存2分钟',
                 icon: '⏰',
                 unlocked: false,
                 condition: (game) => game.elapsedTime >= 120000 // 2 minutes
             },
             {
                 id: 'collector',
-                name: 'Collector',
-                description: 'Collect 50 power-ups',
+                name: '收集家',
+                description: '收集50个道具',
                 icon: '💎',
                 unlocked: false,
                 condition: (game) => game.totalPowerUpsCollected >= 50
             },
             {
                 id: 'gold_rush',
-                name: 'Gold Rush',
-                description: 'Collect 100 gold',
+                name: '黄金狂热',
+                description: '收集100金币',
                 icon: '💰',
                 unlocked: false,
                 condition: (game) => game.totalGoldCollected >= 100
             },
             {
                 id: 'level_master',
-                name: 'Level Master',
-                description: 'Reach level 5',
+                name: '等级大师',
+                description: '达到5级',
                 icon: '⭐',
                 unlocked: false,
                 condition: (game) => game.player.level >= 5
             },
             {
                 id: 'speed_demon',
-                name: 'Speed Demon',
-                description: 'Defeat 10 enemies within 30 seconds',
+                name: '速度恶魔',
+                description: '30秒内击败10个敌人',
                 icon: '⚡',
                 unlocked: false,
                 condition: (game) => game.recentKills >= 10 && game.recentKillTimeWindow <= 30000
             },
             {
                 id: 'shield_master',
-                name: 'Shield Master',
-                description: 'Accumulate 50 shield points',
+                name: '护盾大师',
+                description: '累积50点护盾',
                 icon: '🛡️',
                 unlocked: false,
                 condition: (game) => game.totalShieldPoints >= 50
             },
             {
                 id: 'explosive_expert',
-                name: 'Explosive Expert',
-                description: 'Trigger 10 explosions',
+                name: '爆炸专家',
+                description: '触发10次爆炸',
                 icon: '💥',
                 unlocked: false,
                 condition: (game) => game.totalExplosions >= 10
             },
             {
                 id: 'crit_master',
-                name: 'Critical Master',
-                description: 'Land 20 critical hits',
+                name: '暴击大师',
+                description: '造成20次暴击',
                 icon: '💢',
                 unlocked: false,
                 condition: (game) => game.totalCriticalHits >= 20
             },
             {
                 id: 'perfect_run',
-                name: 'Perfect Run',
-                description: 'Complete a wave without taking damage',
+                name: '完美运行',
+                description: '无伤完成一波',
                 icon: '✨',
                 unlocked: false,
                 condition: (game) => game.damageFreeWaves >= 1
             },
             {
                 id: 'boss_slayer',
-                name: 'Boss Slayer',
-                description: 'Defeat your first boss',
+                name: 'Boss杀手',
+                description: '击败第一个Boss',
                 icon: '🐉',
                 unlocked: false,
                 condition: (game) => game.bossesDefeated >= 1
             },
             {
                 id: 'talent_collector',
-                name: 'Talent Collector',
-                description: 'Select 10 talents',
+                name: '天赋收集家',
+                description: '选择10个天赋',
                 icon: '🎯',
                 unlocked: false,
                 condition: (game) => game.totalTalentsSelected >= 10
@@ -182,7 +182,7 @@ class AchievementSystem {
         // "NEW!" text
         fill(255, 100, 100);
         textSize(12);
-        text("NEW!", x + 200 - slideOffset, y + 20);
+        text("新!", x + 200 - slideOffset, y + 20);
         
         pop();
     }
@@ -206,12 +206,12 @@ class AchievementSystem {
         fill(255, 215, 0);
         textAlign(CENTER, TOP);
         textSize(32);
-        text("ACHIEVEMENTS", width/2, 50);
-        
+        text("成就", width/2, 50);
+
         // Progress
         fill(255);
         textSize(16);
-        text(`${this.getUnlockedCount()}/${this.getTotalCount()} Unlocked`, width/2, 90);
+        text(`${this.getUnlockedCount()}/${this.getTotalCount()} 已解锁`, width/2, 90);
         
         // Achievements grid
         let cols = 3;
@@ -268,7 +268,7 @@ class AchievementSystem {
         fill(255);
         textSize(14);
         textAlign(CENTER, BOTTOM);
-        text("Press ESC to close", width/2, height - 30);
+        text("按 ESC 关闭", width/2, height - 30);
         
         pop();
     }
