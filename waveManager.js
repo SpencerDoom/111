@@ -75,6 +75,11 @@ class WaveManager {
     }
 
     isWaveComplete(enemies) {
+        // Safety check for undefined or null enemies array
+        if (!enemies || !Array.isArray(enemies)) {
+            return false;
+        }
+        
         // Filter out boss minions when counting enemies
         let regularEnemies = enemies.filter(enemy => !(enemy instanceof BossMinion));
         return this.enemiesSpawnedThisWave >= this.enemiesPerWave && 
