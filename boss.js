@@ -22,6 +22,7 @@ class Boss {
         this.lastAttackTime = millis();
         this.attackCooldown = this.getAttackCooldown();
         this.projectileDamage = 2;
+        this.contactDamage = 5; // Boss 碰撞伤害
         
         // Variant-specific properties
         this.setupVariant();
@@ -426,6 +427,7 @@ class BossMinion {
         this.attackCooldown = 3000;
         this.lastAttackTime = millis() + random(-1000, 1000);
         this.projectileDamage = 1;
+        this.contactDamage = 1; // BossMinion 碰撞伤害
     }
 
     update(player) {

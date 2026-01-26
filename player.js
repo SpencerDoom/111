@@ -35,6 +35,7 @@ class Player {
         this.level = 1;
         this.xpToNextLevel = 10;
         this.availableTalents = [];
+        this.acquiredTalents = []; // 记录已获得的天赋ID
         
         // Resources
         this.gold = 0;
@@ -84,6 +85,7 @@ class Player {
         
         // 主动道具管理
         this.activeItems = []; // 支持多个主动道具
+        this.selectedActiveItemIndex = 0; // 当前选中的主动道具索引
         
         // 道具标签追踪
         this.itemTags = new Set();
@@ -137,6 +139,29 @@ class Player {
         this.auraCount = 0; // 光环数量
         this.auraDamage = 2; // 光环伤害
         this.auraRange = 20; // 光环范围
+
+        // 道具系统缺失属性
+        this.hasBerserker = false; // 狂战士天赋
+        this.hasComboSpeed = false; // 连击加速道具
+        this.hasPerfectDodge = false; // 完美闪避道具
+        this.hasSpiralBarrage = false; // 螺旋弹幕道具
+        this.hasElementFusion = false; // 元素融合道具
+        this.hasElementAffinity = false; // 元素亲和道具
+        this.spiralAmplitude = 0; // 螺旋弹幕振幅
+        this.spiralFrequency = 0; // 螺旋弹幕频率
+        this.elementCycle = 0; // 元素循环索引
+        this.elements = []; // 元素数组
+        this.elementTypes = []; // 元素类型数组
+        this.isGiantMode = false; // 巨人模式
+        this.isGhostMode = false; // 幽灵模式
+        this.giantModeEndTime = 0; // 巨人模式结束时间
+        this.ghostModeEndTime = 0; // 幽灵模式结束时间
+        this.comboSpeedEndTime = 0; // 连击加速结束时间
+        this.comboKillCount = 0; // 连击击杀数
+        this.lastComboKillTime = 0; // 最后连击击杀时间
+        this.originalSize = 30; // 原始大小
+        this.originalMaxSpeed = 4; // 原始最大速度
+        this.originalDamage = 2; // 原始伤害
     }
 
     update() {
@@ -286,6 +311,71 @@ class Player {
         
         // 更新金币转换
         this.updateGoldConversion();
+        
+        // 更新巨人模式
+        this.updateGiantMode();
+        
+        // 更新幽灵模式
+        this.updateGhostMode();
+        
+        // 更新连击加速
+        this.updateComboSpeed();
+        
+        // 更新狂战士效果
+        this.updateBerserker();
+    }
+
+    updateGiantMode() {
+        if (!this.isGiantMode) return;
+        
+        // 检查巨人模式是否结束
+        if (this.giantModeEndTime > 0) {
+            this.giantModeEndTime -= 16; // 约60fps
+            if (this.giantModeEndTime <= 0) {
+                // 恢复正常状态
+                this.isGiantMode = false;
+                this.size = this.originalSize;
+                this.maxSpeed = this.originalMaxSpeed;
+                this.projectileDamage = this.originalDamage;
+            }
+        }
+    }
+
+    updateGhostMode() {
+        if (!this.isGhostMode) return;
+        
+        // 检查幽灵模式是否结束
+        if (this.ghostModeEndTime > 0) {
+            this.ghostModeEndTime -= 16; // 约60fps
+            if (this.ghostModeEndTime <= 0) {
+                // 恢复正常状态
+                this.isGhostMode = false;
+            }
+        }
+    }
+
+    updateComboSpeed() {
+        if (!this.hasComboSpeed) return;
+        
+        // 检查连击奖励是否结束
+        if (this.comboSpeedEndTime > 0) {
+            this.comboSpeedEndTime -= 16; // 约60fps
+            if (this.comboSpeedEndTime <= 0) {
+                this.comboSpeedEndTime = 0;
+            }
+        }
+    }
+
+    updateBerserker() {
+        if (!this.hasBerserker) return;
+        
+        // 狂战士效果：生命值越低伤害越高
+        let healthPercent = this.health / this.maxHealth;
+        if (healthPercent < 0.5) {
+            // 最低50%生命时伤害翻倍
+            let berserkerMultiplier = map(healthPercent, 0, 0.5, 2.0, 1.0);
+            this.tempDamageBoost = Math.max(this.tempDamageBoost, Math.floor((berserkerMultiplier - 1.0) * 10));
+        }
     }
 
     updateAuras() {
@@ -427,6 +517,21 @@ class Player {
                     projectile.pierceCount = currentPiercingCount;
                     projectile.isCritical = random() < currentCritChance;
                     projectile.knockbackForce = this.knockbackForce;
+                    
+                    // 螺旋弹幕效果
+                    if (this.hasSpiralBarrage) {
+                        projectile.hasSpiral = true;
+                        projectile.spiralAmplitude = this.spiralAmplitude;
+                        projectile.spiralFrequency = this.spiralFrequency;
+                        projectile.spiralPhase = random(TWO_PI);
+                    }
+                    
+                    // 元素亲和效果
+                    if (this.hasElementAffinity) {
+                        let elementIndex = Math.floor(random(this.elementTypes.length));
+                        projectile.elementType = this.elementTypes[elementIndex];
+                    }
+                    
                     this.projectiles.push(projectile);
                 }
             } else {
@@ -440,6 +545,27 @@ class Player {
                     projectile.pierceCount = currentPiercingCount;
                     projectile.isCritical = random() < currentCritChance;
                     projectile.knockbackForce = this.knockbackForce;
+                    
+                    // 螺旋弹幕效果
+                    if (this.hasSpiralBarrage) {
+                        projectile.hasSpiral = true;
+                        projectile.spiralAmplitude = this.spiralAmplitude;
+                        projectile.spiralFrequency = this.spiralFrequency;
+                        projectile.spiralPhase = random(TWO_PI);
+                    }
+                    
+                    // 元素亲和效果
+                    if (this.hasElementAffinity) {
+                        let elementIndex = Math.floor(random(this.elementTypes.length));
+                        projectile.elementType = this.elementTypes[elementIndex];
+                    }
+                    
+                    // 元素融合效果
+                    if (this.hasElementFusion) {
+                        projectile.elementType = this.elements[this.elementCycle];
+                        this.elementCycle = (this.elementCycle + 1) % this.elements.length;
+                    }
+                    
                     this.projectiles.push(projectile);
                 }
             }
@@ -504,6 +630,15 @@ class Player {
     takeDamage(amount) {
         if (this.invulnerableTime > 0) return; // Invulnerable
         
+        // 闪避大师天赋：有几率完全闪避伤害
+        if (this.hasEvasionMaster && Math.random() < this.evasionChance) {
+            // 闪避成功，显示特效
+            if (typeof game !== 'undefined' && game.addExplosion) {
+                game.addExplosion(this.x, this.y, [200, 200, 255], 5);
+            }
+            return;
+        }
+        
         // 触发事件
         this.triggerEvent('onDamage', amount);
         
@@ -534,6 +669,11 @@ class Player {
     }
 
     gainXP(amount) {
+        // 经验加成天赋
+        if (this.xpMultiplier) {
+            amount = Math.floor(amount * this.xpMultiplier);
+        }
+        
         this.xp += amount;
         
         // Check for level up
@@ -584,20 +724,31 @@ class Player {
             ellipse(0, 0, this.size + 20, this.size + 20);
         }
 
+        // 幽灵模式视觉效果
+        if (this.isGhostMode) {
+            fill(200, 200, 255, 150);
+            stroke(255, 255, 255, 200);
+        }
         // 炮台模式视觉效果
-        if (this.turretMode) {
+        else if (this.turretMode) {
             fill(255, 200, 100);
-        } else {
-            fill(100, 150, 255);
+            stroke(0);
         }
-        
+        // 巨人模式视觉效果
+        else if (this.isGiantMode) {
+            fill(255, 150, 100);
+            stroke(0);
+        }
         // 濒危狂化效果
-        let healthPercent = this.health / this.maxHealth;
-        if (this.hasDangerFrenzy && healthPercent < 0.3) {
+        else if (this.hasDangerFrenzy && (this.health / this.maxHealth) < 0.3) {
             fill(255, 100, 100); // 红色表示危险状态
+            stroke(0);
+        }
+        else {
+            fill(100, 150, 255);
+            stroke(0);
         }
         
-        stroke(0);
         strokeWeight(2);
         ellipse(0, 0, this.size, this.size);
         
@@ -608,7 +759,11 @@ class Player {
         textSize(this.size * 0.8);
         
         // 根据模式显示不同emoji
-        if (this.turretMode) {
+        if (this.isGhostMode) {
+            text("👻", 0, 0);
+        } else if (this.isGiantMode) {
+            text("🦣", 0, 0);
+        } else if (this.turretMode) {
             text("🏰", 0, 0);
         } else if (this.hasWhipWeapon) {
             text("🐍", 0, 0);
@@ -695,33 +850,35 @@ class Player {
     }
 
     // 主动道具管理
-    addActiveItem(itemDef) {
+    addActiveItem(itemDef, cooldownData = null) {
         this.activeItems.push({
             id: itemDef.id,
             def: itemDef,
             cooldownMs: itemDef.cooldownMs || 10000,
-            lastUsedTime: -Infinity
+            lastUsedTime: cooldownData && cooldownData.lastUsedTime ? cooldownData.lastUsedTime : -Infinity
         });
     }
 
-    useActiveItem(index, gameInstance) {
+    useActiveItem(index = 0, gameInstance) {
         if (index < 0 || index >= this.activeItems.length) return false;
-        
+
         let activeItem = this.activeItems[index];
+        if (!activeItem) return false;
+
         let now = millis();
         let cd = activeItem.cooldownMs || 0;
         let last = activeItem.lastUsedTime || -Infinity;
-        
+
         if (now - last < cd) {
             return false; // 冷却中
         }
 
         activeItem.lastUsedTime = now;
-        
+
         if (activeItem.def.onUse) {
             activeItem.def.onUse(this, gameInstance);
         }
-        
+
         if (typeof playSound === 'function') {
             playSound('pickup');
         }
@@ -731,12 +888,26 @@ class Player {
 
     getActiveItemCooldownRemaining(index) {
         if (index < 0 || index >= this.activeItems.length) return 0;
-        
+
         let activeItem = this.activeItems[index];
         let now = millis();
         let cd = activeItem.cooldownMs || 0;
         let last = activeItem.lastUsedTime || -Infinity;
         return Math.max(0, cd - (now - last));
+    }
+
+    switchActiveItem(direction = 1) {
+        if (this.activeItems.length === 0) return;
+        this.selectedActiveItemIndex = (this.selectedActiveItemIndex + direction) % this.activeItems.length;
+        if (this.selectedActiveItemIndex < 0) {
+            this.selectedActiveItemIndex = this.activeItems.length - 1;
+        }
+    }
+
+    selectActiveItem(index) {
+        if (index >= 0 && index < this.activeItems.length) {
+            this.selectedActiveItemIndex = index;
+        }
     }
 
     // Item helpers

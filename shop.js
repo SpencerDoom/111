@@ -114,23 +114,7 @@ class ShopSystem {
                 },
                 apply: (p) => {
                     if (typeof grantItemToPlayer === 'function') {
-                        // 注册事件监听器
-                        if (def.onKill) {
-                            p.addEventListener('onKill', (enemy) => def.onKill(p, enemy, game));
-                        }
-                        if (def.onCrit) {
-                            p.addEventListener('onCrit', (enemy) => def.onCrit(p, enemy, game));
-                        }
-                        if (def.onDamage) {
-                            p.addEventListener('onDamage', (damage) => def.onDamage(p, damage, game));
-                        }
-                        if (def.onGoldCollected) {
-                            p.addEventListener('onGoldCollected', (amount) => def.onGoldCollected(p, amount, game));
-                        }
-                        if (def.onProjectileHit) {
-                            p.addEventListener('onProjectileHit', (projectile, enemy) => def.onProjectileHit(p, projectile, enemy, game));
-                        }
-                        
+                        // grantItemToPlayer 已经包含了事件监听器注册逻辑，无需重复注册
                         grantItemToPlayer(p, def.id, typeof game !== 'undefined' ? game : null);
                     }
                 }

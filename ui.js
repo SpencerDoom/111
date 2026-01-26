@@ -158,8 +158,8 @@ class UIManager {
         if (player.tempXPMagnet > 0) effects.push({emoji: "🌟", time: player.tempXPMagnet});
         if (player.tempGoldMagnet > 0) effects.push({emoji: "🧲", time: player.tempGoldMagnet});
 
-        let hasActiveItem = player.activeItem && player.activeItem.def;
-        if (!hasActiveItem && effects.length === 0) return;
+        let hasActiveItems = player.activeItems && player.activeItems.length > 0;
+        if (!hasActiveItems && effects.length === 0) return;
 
         fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
         textAlign(LEFT, TOP);
@@ -167,11 +167,28 @@ class UIManager {
 
         let offsetY = y;
 
-        if (hasActiveItem) {
-            let remainMs = player.getActiveItemCooldownRemaining ? player.getActiveItemCooldownRemaining() : 0;
-            let cdText = remainMs <= 0 ? '就绪' : `${(remainMs / 1000).toFixed(1)}s`;
-            text(`E: ${player.activeItem.def.emoji} ${player.activeItem.def.name} (${cdText})`, x, offsetY);
+        // 显示所有主动道具
+        if (hasActiveItems) {
+            text("主动道具 (Q切换，1-3选择):", x, offsetY);
             offsetY += 14;
+
+            for (let i = 0; i < player.activeItems.length; i++) {
+                let activeItem = player.activeItems[i];
+                let isSelected = i === player.selectedActiveItemIndex;
+                let remainMs = player.getActiveItemCooldownRemaining(i);
+                let cdText = remainMs <= 0 ? '就绪' : `${(remainMs / 1000).toFixed(1)}s`;
+
+                // 选中的道具高亮显示
+                if (isSelected) {
+                    fill(this.colorScheme.gold[0], this.colorScheme.gold[1], this.colorScheme.gold[2]);
+                    text(`► ${i + 1}. ${activeItem.def.emoji} ${activeItem.def.name} (${cdText})`, x, offsetY);
+                } else {
+                    fill(this.colorScheme.textColor[0], this.colorScheme.textColor[1], this.colorScheme.textColor[2]);
+                    text(`  ${i + 1}. ${activeItem.def.emoji} ${activeItem.def.name} (${cdText})`, x, offsetY);
+                }
+                offsetY += 14;
+            }
+            offsetY += 5;
         }
 
         if (effects.length > 0) {

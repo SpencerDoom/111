@@ -57,11 +57,37 @@ class WaveManager {
         if (this.currentWave === 1) return 'grunt';
         
         let rand = random();
-        if (rand < 0.3) return 'grunt';
-        else if (rand < 0.5) return 'alien';
-        else if (rand < 0.7) return 'saucer';
-        else if (rand < 0.85) return 'skull';
-        else return 'robot';
+        
+        // Wave 2-3: 基础敌人
+        if (this.currentWave <= 3) {
+            if (rand < 0.4) return 'grunt';
+            else if (rand < 0.7) return 'alien';
+            else if (rand < 0.85) return 'saucer';
+            else return 'skull';
+        }
+        // Wave 4-6: 加入新敌人
+        else if (this.currentWave <= 6) {
+            if (rand < 0.25) return 'grunt';
+            else if (rand < 0.45) return 'alien';
+            else if (rand < 0.6) return 'saucer';
+            else if (rand < 0.75) return 'skull';
+            else if (rand < 0.85) return 'robot';
+            else if (rand < 0.92) return 'knight';
+            else return 'slime';
+        }
+        // Wave 7+: 所有敌人类型
+        else {
+            if (rand < 0.15) return 'grunt';
+            else if (rand < 0.3) return 'alien';
+            else if (rand < 0.45) return 'saucer';
+            else if (rand < 0.55) return 'skull';
+            else if (rand < 0.65) return 'robot';
+            else if (rand < 0.73) return 'knight';
+            else if (rand < 0.8) return 'slime';
+            else if (rand < 0.87) return 'mage';
+            else if (rand < 0.93) return 'sniper';
+            else return 'healer';
+        }
     }
 
     createEnemy(type, x, y) {
@@ -71,6 +97,12 @@ class WaveManager {
             case 'saucer': return new SaucerEnemy(x, y);
             case 'skull': return new SkullEnemy(x, y);
             case 'robot': return new RobotEnemy(x, y);
+            // 新敌人类型
+            case 'knight': return new KnightEnemy(x, y);
+            case 'mage': return new MageEnemy(x, y);
+            case 'slime': return new SlimeEnemy(x, y);
+            case 'sniper': return new SniperEnemy(x, y);
+            case 'healer': return new HealerEnemy(x, y);
             default: return new GruntEnemy(x, y);
         }
     }

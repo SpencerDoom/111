@@ -29,12 +29,34 @@ class Projectile {
         this.exploded = false; // For explosive projectiles
         this.slowEffect = false; // For time slow projectiles
         this.poisonEffect = false; // For poison projectiles
+        
+        // 螺旋弹幕属性
+        this.hasSpiral = false;
+        this.spiralAmplitude = 0;
+        this.spiralFrequency = 0;
+        this.spiralPhase = 0;
+        this.spiralDistance = 0;
+        
+        // 元素效果属性
+        this.elementType = null; // 'fire', 'ice', 'lightning'
     }
 
     update() {
-        // Update position
-        this.x += this.vx;
-        this.y += this.vy;
+        // 更新螺旋轨迹
+        if (this.hasSpiral) {
+            this.spiralDistance += this.speed;
+            let spiralOffsetX = cos(this.spiralPhase + this.spiralDistance * this.spiralFrequency) * this.spiralAmplitude;
+            let spiralOffsetY = sin(this.spiralPhase + this.spiralDistance * this.spiralFrequency) * this.spiralAmplitude;
+            
+            // 计算垂直于运动方向的偏移
+            let perpAngle = this.angle + PI / 2;
+            this.x += this.vx + cos(perpAngle) * (spiralOffsetX - (this.spiralDistance - this.speed) * this.spiralAmplitude * this.spiralFrequency);
+            this.y += this.vy + sin(perpAngle) * (spiralOffsetY - (this.spiralDistance - this.speed) * this.spiralAmplitude * this.spiralFrequency);
+        } else {
+            // Update position
+            this.x += this.vx;
+            this.y += this.vy;
+        }
         
         // Update trail
         this.trail.push({ x: this.x, y: this.y });
@@ -66,6 +88,30 @@ class Projectile {
         stroke(255);
         strokeWeight(1);
         ellipse(this.x, this.y, this.size, this.size);
+        
+        // 元素效果视觉
+        if (this.elementType) {
+            switch(this.elementType) {
+                case 'fire':
+                    // 火焰效果
+                    fill(255, 100, 0, 100);
+                    noStroke();
+                    ellipse(this.x, this.y, this.size * 1.5, this.size * 1.5);
+                    break;
+                case 'ice':
+                    // 冰霜效果
+                    fill(100, 200, 255, 100);
+                    noStroke();
+                    ellipse(this.x, this.y, this.size * 1.5, this.size * 1.5);
+                    break;
+                case 'lightning':
+                    // 雷电效果
+                    fill(255, 255, 100, 100);
+                    noStroke();
+                    ellipse(this.x, this.y, this.size * 1.5, this.size * 1.5);
+                    break;
+            }
+        }
         
         // Add glow effect for special projectiles
         if (this.type === 'boss') {

@@ -12,6 +12,7 @@ class Enemy {
         this.lastAttackTime = millis() + random(-1000, 1000); // Stagger initial attacks
         this.attackCooldown = 3000; // 3 seconds between attacks
         this.projectileDamage = 1;
+        this.contactDamage = 1; // 碰撞伤害
         this.xpValue = 5;
         this.goldValue = 1;
     }
@@ -585,5 +586,416 @@ class BomberEnemy extends Enemy {
         for (let projectile of this.projectiles) {
             projectile.display();
         }
+    }
+}
+
+// ============================================
+// 5种新敌人类型（游戏扩展计划）
+// ============================================
+
+// 骑士 - 高防御，移动慢，正面减伤
+class KnightEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 'knight');
+        this.speed = 0.6;
+        this.health = 8;
+        this.maxHealth = 8;
+        this.attackCooldown = 3500;
+        this.projectileDamage = 2;
+        this.xpValue = 12;
+        this.goldValue = 5;
+        this.size = 32;
+        this.shieldActive = true;
+        this.shieldCooldown = 0;
+    }
+
+    takeDamage(amount) {
+        // 检查是否从正面受击
+        if (typeof game !== 'undefined' && game.player) {
+            let angleToPlayer = atan2(this.y - game.player.y, this.x - game.player.x);
+            let movementAngle = atan2(this.vy || 0, this.vx || 0);
+            let angleDiff = abs(angleToPlayer - movementAngle);
+            
+            // 如果从正面受击，伤害减少50%
+            if (angleDiff < PI / 3 && this.shieldActive) {
+                amount = Math.floor(amount * 0.5);
+                this.shieldActive = false;
+                this.shieldCooldown = 2000; // 2秒后恢复护盾
+            }
+        }
+        
+        super.takeDamage(amount);
+    }
+
+    update(player) {
+        super.update(player);
+        
+        // 护盾恢复
+        if (!this.shieldActive && millis() > this.shieldCooldown) {
+            this.shieldActive = true;
+        }
+    }
+
+    getColor() {
+        return this.shieldActive ? color(180, 180, 200) : color(150, 150, 170);
+    }
+
+    getEmoji() {
+        return "🛡️";
+    }
+
+    display() {
+        super.display();
+        
+        // 显示护盾状态
+        if (this.shieldActive) {
+            push();
+            translate(this.x, this.y);
+            noFill();
+            stroke(200, 200, 255, 150);
+            strokeWeight(3);
+            ellipse(0, 0, this.size + 10, this.size + 10);
+            pop();
+        }
+    }
+}
+
+// 法师 - 远程魔法攻击，可瞬移
+class MageEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 'mage');
+        this.speed = 0.9;
+        this.health = 4;
+        this.maxHealth = 4;
+        this.attackCooldown = 2500;
+        this.projectileDamage = 2;
+        this.xpValue = 10;
+        this.goldValue = 4;
+        this.teleportCooldown = 8000;
+        this.lastTeleportTime = millis();
+        this.magicColor = color(150, 100, 255);
+    }
+
+    update(player) {
+        super.update(player);
+        
+        // 瞬移逻辑
+        if (millis() - this.lastTeleportTime > this.teleportCooldown) {
+            let distance = dist(this.x, this.y, player.x, player.y);
+            
+            // 如果距离玩家太近或太远，瞬移到合适位置
+            if (distance < 100 || distance > 300) {
+                this.teleport(player);
+                this.lastTeleportTime = millis();
+            }
+        }
+    }
+
+    teleport(player) {
+        // 瞬移到玩家周围随机位置
+        let angle = random(TWO_PI);
+        let distance = random(150, 250);
+        this.x = player.x + cos(angle) * distance;
+        this.y = player.y + sin(angle) * distance;
+        
+        // 瞬移特效
+        if (typeof game !== 'undefined' && game.addExplosion) {
+            game.addExplosion(this.x, this.y, [150, 100, 255], 8);
+        }
+    }
+
+    attack(player) {
+        // 发射3发魔法弹，呈扇形
+        let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
+        
+        for (let i = -1; i <= 1; i++) {
+            let spreadAngle = angleToPlayer + (i * PI / 8);
+            let projectile = new Projectile(
+                this.x, this.y, spreadAngle, 'enemy', 
+                this.projectileDamage, this.magicColor, 6, 5
+            );
+            projectile.isMagic = true;
+            this.projectiles.push(projectile);
+        }
+    }
+
+    getColor() {
+        return color(150, 100, 255);
+    }
+
+    getEmoji() {
+        return "🧙";
+    }
+}
+
+// 史莱姆 - 被击中分裂成小史莱姆
+class SlimeEnemy extends Enemy {
+    constructor(x, y, isSmall = false) {
+        super(x, y, 'slime');
+        this.isSmall = isSmall;
+        
+        if (isSmall) {
+            this.size = 18;
+            this.speed = 1.8;
+            this.health = 2;
+            this.maxHealth = 2;
+            this.xpValue = 3;
+            this.goldValue = 1;
+        } else {
+            this.size = 30;
+            this.speed = 1.2;
+            this.health = 6;
+            this.maxHealth = 6;
+            this.xpValue = 8;
+            this.goldValue = 3;
+        }
+        
+        this.attackCooldown = 4000;
+        this.projectileDamage = 1;
+        this.canSplit = !isSmall;
+        this.splitThreshold = 3; // 受到3次攻击后分裂
+        this.hitsTaken = 0;
+    }
+
+    takeDamage(amount) {
+        this.hitsTaken++;
+        super.takeDamage(amount);
+        
+        // 分裂逻辑
+        if (this.canSplit && this.hitsTaken >= this.splitThreshold && this.health > 0) {
+            this.split();
+        }
+    }
+
+    split() {
+        if (typeof game === 'undefined' || !game) return;
+        
+        this.canSplit = false;
+        
+        // 创建2个小史莱姆
+        for (let i = 0; i < 2; i++) {
+            let offsetX = random(-20, 20);
+            let offsetY = random(-20, 20);
+            let smallSlime = new SlimeEnemy(this.x + offsetX, this.y + offsetY, true);
+            game.enemies.push(smallSlime);
+        }
+        
+        // 分裂特效
+        if (game.addExplosion) {
+            game.addExplosion(this.x, this.y, [100, 255, 100], 10);
+        }
+    }
+
+    moveTowardsPlayer(player) {
+        // 史莱姆有弹跳移动效果
+        let angle = atan2(player.y - this.y, player.x - this.x);
+        let bounce = sin(millis() * 0.01) * 0.3;
+        this.x += cos(angle + bounce) * this.speed;
+        this.y += sin(angle + bounce) * this.speed;
+    }
+
+    getColor() {
+        return this.isSmall ? color(100, 200, 100) : color(80, 255, 80);
+    }
+
+    getEmoji() {
+        return "🟢";
+    }
+
+    display() {
+        super.display();
+        
+        // 史莱姆有弹性效果
+        let squish = sin(millis() * 0.01) * 0.1;
+        
+        push();
+        translate(this.x, this.y);
+        fill(100, 255, 100, 100);
+        noStroke();
+        ellipse(0, this.size * 0.3, this.size * (1 + squish), this.size * (1 - squish));
+        pop();
+    }
+}
+
+// 狙击手 - 高伤害单发，攻击前蓄力
+class SniperEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 'sniper');
+        this.speed = 0.5;
+        this.health = 3;
+        this.maxHealth = 3;
+        this.attackCooldown = 5000;
+        this.projectileDamage = 5;
+        this.xpValue = 15;
+        this.goldValue = 6;
+        this.size = 28;
+        this.isCharging = false;
+        this.chargeStartTime = 0;
+        this.chargeDuration = 1500;
+        this.chargeColor = color(255, 255, 0);
+    }
+
+    update(player) {
+        // 保持距离玩家
+        let distance = dist(this.x, this.y, player.x, player.y);
+        let desiredDistance = 250;
+        
+        if (distance < desiredDistance) {
+            // 后退
+            let angle = atan2(this.y - player.y, this.x - player.x);
+            this.x += cos(angle) * this.speed;
+            this.y += sin(angle) * this.speed;
+        } else if (distance > desiredDistance + 50) {
+            // 靠近
+            this.moveTowardsPlayer(player);
+        }
+        
+        this.updateAttack(player);
+        this.updateProjectiles(player);
+        
+        // 更新蓄力状态
+        if (this.isCharging) {
+            let chargeProgress = (millis() - this.chargeStartTime) / this.chargeDuration;
+            if (chargeProgress >= 1) {
+                this.fireSniperShot(player);
+                this.isCharging = false;
+            }
+        }
+    }
+
+    updateAttack(player) {
+        if (!this.isCharging && millis() - this.lastAttackTime > this.attackCooldown) {
+            this.isCharging = true;
+            this.chargeStartTime = millis();
+        }
+    }
+
+    fireSniperShot(player) {
+        let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
+        let projectile = new Projectile(
+            this.x, this.y, angleToPlayer, 'enemy', 
+            this.projectileDamage, color(255, 50, 50), 8, 12
+        );
+        projectile.isSniperShot = true;
+        projectile.pierceCount = 2; // 可穿透2个敌人
+        this.projectiles.push(projectile);
+        
+        this.lastAttackTime = millis();
+    }
+
+    getColor() {
+        return color(100, 100, 120);
+    }
+
+    getEmoji() {
+        return "🎯";
+    }
+
+    display() {
+        super.display();
+        
+        // 蓄力指示器
+        if (this.isCharging) {
+            let chargeProgress = (millis() - this.chargeStartTime) / this.chargeDuration;
+            chargeProgress = constrain(chargeProgress, 0, 1);
+            
+            push();
+            translate(this.x, this.y);
+            noFill();
+            stroke(255, 255 - chargeProgress * 255, 0);
+            strokeWeight(3);
+            let arcLength = TWO_PI * chargeProgress;
+            arc(0, 0, this.size + 15, this.size + 15, -PI/2, -PI/2 + arcLength);
+            pop();
+        }
+    }
+}
+
+// 治疗者 - 治疗周围敌人
+class HealerEnemy extends Enemy {
+    constructor(x, y) {
+        super(x, y, 'healer');
+        this.speed = 0.7;
+        this.health = 5;
+        this.maxHealth = 5;
+        this.attackCooldown = 4000;
+        this.projectileDamage = 1;
+        this.xpValue = 10;
+        this.goldValue = 4;
+        this.size = 28;
+        this.healRange = 150;
+        this.healAmount = 2;
+        this.lastHealTime = millis();
+        this.healCooldown = 3000;
+        this.healColor = color(100, 255, 100);
+    }
+
+    update(player) {
+        super.update(player);
+        
+        // 治疗周围敌人
+        if (millis() - this.lastHealTime > this.healCooldown) {
+            this.healNearbyEnemies();
+            this.lastHealTime = millis();
+        }
+    }
+
+    healNearbyEnemies() {
+        if (typeof game === 'undefined' || !game || !game.enemies) return;
+        
+        let healedCount = 0;
+        
+        for (let enemy of game.enemies) {
+            if (enemy === this || enemy.isDead()) continue;
+            
+            let distance = dist(this.x, this.y, enemy.x, enemy.y);
+            if (distance <= this.healRange) {
+                enemy.health = Math.min(enemy.maxHealth, enemy.health + this.healAmount);
+                healedCount++;
+            }
+        }
+        
+        // 治疗特效
+        if (healedCount > 0 && typeof game !== 'undefined' && game.addExplosion) {
+            game.addExplosion(this.x, this.y, [100, 255, 100], 12);
+        }
+    }
+
+    attack(player) {
+        // 发射治疗弹（对玩家造成伤害）
+        let angleToPlayer = atan2(player.y - this.y, player.x - this.x);
+        let projectile = new Projectile(
+            this.x, this.y, angleToPlayer, 'enemy', 
+            this.projectileDamage, this.healColor, 5, 4
+        );
+        projectile.isHealShot = true;
+        this.projectiles.push(projectile);
+    }
+
+    getColor() {
+        return color(100, 255, 100);
+    }
+
+    getEmoji() {
+        return "💊";
+    }
+
+    display() {
+        super.display();
+        
+        // 治疗范围指示器
+        push();
+        translate(this.x, this.y);
+        noFill();
+        stroke(100, 255, 100, 80);
+        strokeWeight(1);
+        ellipse(0, 0, this.healRange * 2, this.healRange * 2);
+        
+        // 十字标记
+        stroke(100, 255, 100, 150);
+        strokeWeight(2);
+        line(-8, 0, 8, 0);
+        line(0, -8, 0, 8);
+        pop();
     }
 }

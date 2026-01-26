@@ -12,6 +12,7 @@ class Game {
         this.achievementSystem = new AchievementSystem();
         this.environmentSystem = new EnvironmentSystem();
         this.shopSystem = new ShopSystem();
+        this.cheatMenu = new CheatMenu();
         
         // Game entities
         this.player = null;
@@ -23,6 +24,7 @@ class Game {
         this.soulFragments = []; // 灵魂碎片
         this.mirrorClones = []; // 分身镜像
         this.auras = []; // 光环效果
+        this.bombs = []; // 延迟炸弹
         
         // 事件总线系统
         this.eventListeners = {};
@@ -40,6 +42,7 @@ class Game {
                 id: 'hp_boost',
                 name: "+2 最大生命值",
                 description: "增加2点最大生命值并恢复满血。",
+                stackable: true,
                 apply: (p) => {
                     p.maxHealth += 2;
                     p.health = p.maxHealth;
@@ -49,6 +52,7 @@ class Game {
                 id: 'damage_boost',
                 name: "+1 伤害",
                 description: "增加1点投射物伤害。",
+                stackable: true,
                 apply: (p) => {
                     p.projectileDamage += 1;
                 }
@@ -57,6 +61,7 @@ class Game {
                 id: 'speed_boost',
                 name: "+速度",
                 description: "增加移动速度和加速度。",
+                stackable: true,
                 apply: (p) => {
                     p.maxSpeed += 0.5;
                     p.acceleration += 0.1;
@@ -66,6 +71,7 @@ class Game {
                 id: 'fire_rate',
                 name: "快速射击",
                 description: "减少射击冷却时间50毫秒。",
+                stackable: true,
                 apply: (p) => {
                     p.shotCooldown = Math.max(100, p.shotCooldown - 50);
                 }
@@ -74,6 +80,7 @@ class Game {
                 id: 'dash_cooldown',
                 name: "冲刺精通",
                 description: "减少冲刺冷却时间500毫秒。",
+                stackable: true,
                 apply: (p) => {
                     p.dashCooldown = Math.max(500, p.dashCooldown - 500);
                 }
@@ -83,6 +90,7 @@ class Game {
                 id: 'piercing_shots',
                 name: "穿透射击",
                 description: "投射物可穿透2个额外敌人。",
+                stackable: true,
                 apply: (p) => {
                     p.piercingCount = (p.piercingCount || 0) + 2;
                 }
@@ -91,6 +99,7 @@ class Game {
                 id: 'spread_shot',
                 name: "散射",
                 description: "以散射模式发射3发子弹。",
+                stackable: false,
                 apply: (p) => {
                     p.spreadShot = true;
                 }
@@ -99,6 +108,7 @@ class Game {
                 id: 'auto_heal',
                 name: "再生",
                 description: "每5秒恢复1点生命值。",
+                stackable: false,
                 apply: (p) => {
                     p.regenRate = 2000; // Every 2 seconds
                     p.lastRegenTime = millis();
@@ -108,6 +118,7 @@ class Game {
                 id: 'shield',
                 name: "能量护盾",
                 description: "获得2点护盾（可叠加）。",
+                stackable: true,
                 apply: (p) => {
                     p.shield = (p.shield || 0) + 2;
                     p.maxShield = (p.maxShield || 0) + 2;
@@ -117,24 +128,87 @@ class Game {
                 id: 'vampiric',
                 name: "吸血",
                 description: "击杀敌人时恢复1点生命值。",
+                stackable: false,
                 apply: (p) => {
                     p.vampiric = true;
                 }
             },
+            // ============================================
+            // 8种新天赋（游戏扩展计划）
+            // ============================================
             {
-                id: 'gold_magnet',
-                name: "黄金磁铁",
-                description: "自动吸引附近的黄金。",
+                id: 'dual_wield',
+                name: "双持大师",
+                description: "可同时装备两个主动道具。",
+                stackable: false,
                 apply: (p) => {
-                    p.goldMagnet = true;
+                    p.canDualWield = true;
+                    p.maxActiveItems = 2;
                 }
             },
             {
-                id: 'xp_magnet',
-                name: "经验磁铁",
-                description: "自动吸引附近的经验。",
+                id: 'element_affinity',
+                name: "元素亲和",
+                description: "投射物随机附加火/冰/雷元素效果。",
+                stackable: false,
                 apply: (p) => {
-                    p.xpMagnet = true;
+                    p.hasElementAffinity = true;
+                    p.elementTypes = ['fire', 'ice', 'lightning'];
+                }
+            },
+            {
+                id: 'berserker',
+                name: "狂战士",
+                description: "生命值越低伤害越高（最低50%生命时伤害翻倍）。",
+                stackable: false,
+                apply: (p) => {
+                    p.hasBerserker = true;
+                }
+            },
+            {
+                id: 'evasion_master',
+                name: "闪避大师",
+                description: "受到伤害时有20%几率完全闪避。",
+                stackable: false,
+                apply: (p) => {
+                    p.hasEvasionMaster = true;
+                    p.evasionChance = 0.2;
+                }
+            },
+            {
+                id: 'ammo_optimization',
+                name: "弹药优化",
+                description: "射击冷却减少30%。",
+                stackable: false,
+                apply: (p) => {
+                    p.shotCooldown = Math.max(100, p.shotCooldown * 0.7);
+                }
+            },
+            {
+                id: 'precision_strike',
+                name: "精准打击",
+                description: "暴击率提升15%。",
+                stackable: true,
+                apply: (p) => {
+                    p.critChance = (p.critChance || 0) + 0.15;
+                }
+            },
+            {
+                id: 'life_drain',
+                name: "生命汲取",
+                description: "击杀敌人时恢复2点生命值。",
+                stackable: false,
+                apply: (p) => {
+                    p.hasLifeDrain = true;
+                }
+            },
+            {
+                id: 'xp_boost',
+                name: "经验加成",
+                description: "经验获取提升25%。",
+                stackable: false,
+                apply: (p) => {
+                    p.xpMultiplier = 1.25;
                 }
             }
         ];
@@ -275,6 +349,11 @@ class Game {
                     this.triggerEvent('onKill', enemy);
                     this.player.onKill(enemy);
                     
+                    // 生命汲取天赋
+                    if (this.player.hasLifeDrain) {
+                        this.player.heal(2);
+                    }
+                    
                     // Track achievements
                     this.totalKills++;
                     this.recentKills++;
@@ -330,6 +409,40 @@ class Game {
             
             if (!clone.active) {
                 this.mirrorClones.splice(i, 1);
+            }
+        }
+        
+        // 更新延迟炸弹
+        for (let i = this.bombs.length - 1; i >= 0; i--) {
+            let bomb = this.bombs[i];
+            
+            if (!bomb.active) {
+                this.bombs.splice(i, 1);
+                continue;
+            }
+            
+            // 检查是否到了爆炸时间
+            if (millis() - bomb.spawnTime >= bomb.delay) {
+                // 爆炸特效
+                this.addExplosion(bomb.x, bomb.y, [255, 165, 0], 15);
+                this.addScreenShake(8, 15);
+                
+                // 范围伤害
+                for (let enemy of this.enemies) {
+                    if (enemy.isDead()) continue;
+                    let distance = dist(bomb.x, bomb.y, enemy.x, enemy.y);
+                    if (distance <= bomb.radius) {
+                        enemy.takeDamage(bomb.damage);
+                    }
+                }
+                
+                // 对玩家也造成伤害（如果距离太近）
+                let playerDistance = dist(bomb.x, bomb.y, this.player.x, this.player.y);
+                if (playerDistance <= bomb.radius * 0.5) {
+                    this.player.takeDamage(Math.floor(bomb.damage * 0.3));
+                }
+                
+                bomb.active = false;
             }
         }
         
@@ -556,23 +669,39 @@ class Game {
         if (mouseIsPressed) {
             this.player.shoot();
         }
-        
+
         // Handle keyboard input
         if (keyIsPressed) {
             // Dash on space
             if (key === ' ') {
                 this.player.attemptDash();
             }
-            
+
             // Use active item on F
             if (key === 'f' || key === 'F') {
-                this.player.useActiveItem(this);
+                this.player.useActiveItem(this.player.selectedActiveItemIndex, this);
             }
-            
+
+            // Switch active item with Q key
+            if (key === 'q' || key === 'Q') {
+                this.player.switchActiveItem(1);
+            }
+
+            // Select active item with number keys 1-3
+            if (key === '1') {
+                this.player.selectActiveItem(0);
+            }
+            if (key === '2') {
+                this.player.selectActiveItem(1);
+            }
+            if (key === '3') {
+                this.player.selectActiveItem(2);
+            }
+
             // Toggle turret mode on T (if available)
             if (key === 't' || key === 'T') {
                 if (this.player.hasItem && this.player.hasItem('turret_mode')) {
-                    this.player.useActiveItem(this);
+                    this.player.useActiveItem(this.player.selectedActiveItemIndex, this);
                 }
             }
         }
@@ -707,6 +836,14 @@ class Game {
         let availableTalents = this.allTalents.slice();
         let selectedTalents = [];
         
+        // 排除已获得的不可叠加天赋
+        if (this.player.acquiredTalents && this.player.acquiredTalents.length > 0) {
+            availableTalents = availableTalents.filter(talent => 
+                // 只过滤不可叠加的天赋（stackable: false 或未定义）
+                (talent.stackable !== false) || !this.player.acquiredTalents.includes(talent.id)
+            );
+        }
+        
         // Select 3 random talents
         for (let i = 0; i < 3; i++) {
             if (availableTalents.length === 0) break;
@@ -731,6 +868,16 @@ class Game {
         let shieldBefore = this.player.shield || 0;
         
         talent.apply(this.player);
+        
+        // 只记录不可叠加的天赋
+        if (talent.stackable === false) {
+            if (!this.player.acquiredTalents) {
+                this.player.acquiredTalents = [];
+            }
+            if (!this.player.acquiredTalents.includes(talent.id)) {
+                this.player.acquiredTalents.push(talent.id);
+            }
+        }
         
         // Track shield points after applying talent
         let shieldAfter = this.player.shield || 0;
@@ -758,6 +905,7 @@ class Game {
         this.soulFragments = [];
         this.mirrorClones = [];
         this.auras = [];
+        this.bombs = [];
         this.timeEvents = [];
         
         // Reset game statistics
@@ -837,6 +985,11 @@ class Game {
         
         // Display UI
         this.uiManager.drawHUD(this.player, this.waveManager);
+
+        // Display cheat menu if open
+        if (this.cheatMenu && this.cheatMenu.isOpen) {
+            this.cheatMenu.draw();
+        }
 
         // Display game state overlays
         if (this.gameState.getState() === 'start') {
@@ -962,6 +1115,8 @@ class Game {
             if (keyValue === 'Escape') {
                 this.gameState.openShop();
                 this.shopSystem.open(this.player, this.waveManager.getCurrentWave());
+            } else if (keyValue === 'c' || keyValue === 'C') {
+                this.cheatMenu.toggle();
             }
         }
     }
@@ -975,6 +1130,14 @@ class Game {
     mousePressed() {
         if (this.gameState.getState() === 'start') {
             this.startGame();
+        } else if (this.cheatMenu && this.cheatMenu.isOpen) {
+            this.cheatMenu.handleClick(mouseX, mouseY);
+        }
+    }
+
+    mouseWheel(delta) {
+        if (this.cheatMenu && this.cheatMenu.isOpen) {
+            this.cheatMenu.handleScroll(delta);
         }
     }
 }

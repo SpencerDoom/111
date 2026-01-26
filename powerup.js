@@ -651,6 +651,270 @@ const ITEM_DEFS = [
                 game.mirrorClones.push(player.mirrorClone);
             }
         }
+    },
+
+    // ============================================
+    // 10种新道具（游戏扩展计划）
+    // ============================================
+
+    // 分裂与弹幕系统（2种）
+    {
+        id: 'spiral_barrage',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '🌀',
+        name: '螺旋弹幕',
+        description: '子弹呈螺旋轨迹飞行，增加命中率和范围。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_spiral'],
+        apply: (player, game) => {
+            player.hasSpiralBarrage = true;
+            player.spiralAmplitude = 20;
+            player.spiralFrequency = 0.1;
+        }
+    },
+    {
+        id: 'delay_bomb',
+        type: 'active',
+        rarity: 'rare',
+        emoji: '💣',
+        name: '延迟炸弹',
+        description: '主动：投掷一枚延迟炸弹，2秒后爆炸造成范围伤害。冷却8秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_bomb'],
+        cooldownMs: 8000,
+        onUse: (player, game) => {
+            if (!game) return;
+            let bomb = {
+                x: player.x,
+                y: player.y,
+                size: 30,
+                damage: player.projectileDamage * 3,
+                radius: 100,
+                delay: 2000,
+                spawnTime: millis(),
+                active: true
+            };
+            game.bombs.push(bomb);
+        }
+    },
+
+    // 能量转换系统（2种）
+    {
+        id: 'life_conversion',
+        type: 'active',
+        rarity: 'rare',
+        emoji: '❤️',
+        name: '生命转化',
+        description: '主动：消耗50金币恢复5点生命值。冷却10秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_conversion'],
+        cooldownMs: 10000,
+        onUse: (player, game) => {
+            if (player.gold >= 50) {
+                player.gold -= 50;
+                player.heal(5);
+                if (game && game.addExplosion) {
+                    game.addExplosion(player.x, player.y, [255, 100, 100], 10);
+                }
+            }
+        }
+    },
+    {
+        id: 'xp_conversion',
+        type: 'active',
+        rarity: 'rare',
+        emoji: '📚',
+        name: '经验转化',
+        description: '主动：消耗30金币获得15点经验值。冷却10秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_conversion'],
+        cooldownMs: 10000,
+        onUse: (player, game) => {
+            if (player.gold >= 30) {
+                player.gold -= 30;
+                player.gainXP(15);
+                if (game && game.addExplosion) {
+                    game.addExplosion(player.x, player.y, [100, 200, 255], 10);
+                }
+            }
+        }
+    },
+
+    // 条件触发型（2种）
+    {
+        id: 'combo_speed',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '⚡',
+        name: '连击加速',
+        description: '连续击杀3个敌人时，移动速度提升50%，持续5秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_combo'],
+        apply: (player, game) => {
+            player.hasComboSpeed = true;
+            player.comboKillCount = 0;
+            player.lastComboKillTime = 0;
+            player.comboSpeedEndTime = 0;
+        },
+        onKill: (player, enemy, game) => {
+            let now = millis();
+            if (now - player.lastComboKillTime > 3000) {
+                player.comboKillCount = 0;
+            }
+            
+            player.comboKillCount++;
+            player.lastComboKillTime = now;
+            
+            if (player.comboKillCount >= 3) {
+                player.comboSpeedEndTime = 5000;
+                player.comboKillCount = 0;
+            }
+        }
+    },
+    {
+        id: 'perfect_dodge',
+        type: 'passive',
+        rarity: 'rare',
+        emoji: '💨',
+        name: '完美闪避',
+        description: '闪避攻击后获得1秒无敌时间。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_dodge'],
+        apply: (player, game) => {
+            player.hasPerfectDodge = true;
+        },
+        onDamage: (player, damage, game) => {
+            if (player.isDashing) {
+                player.invulnerableTime = 1000;
+            }
+        }
+    },
+
+    // 变身与模式（2种）
+    {
+        id: 'giant_mode',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '🦣',
+        name: '巨人模式',
+        description: '主动：体型变大50%，伤害提升30%，速度降低20%。持续8秒。冷却15秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_mode'],
+        cooldownMs: 15000,
+        onUse: (player, game) => {
+            if (!player.isGiantMode) {
+                player.isGiantMode = true;
+                player.giantModeEndTime = 8000;
+                player.originalSize = player.size;
+                player.originalMaxSpeed = player.maxSpeed;
+                player.originalDamage = player.projectileDamage;
+                
+                player.size = player.originalSize * 1.5;
+                player.maxSpeed = player.originalMaxSpeed * 0.8;
+                player.projectileDamage = Math.floor(player.originalDamage * 1.3);
+            }
+        }
+    },
+    {
+        id: 'ghost_mode',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '👻',
+        name: '幽灵模式',
+        description: '主动：穿墙，无法攻击，但免疫所有伤害。持续5秒。冷却20秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_mode'],
+        cooldownMs: 20000,
+        onUse: (player, game) => {
+            if (!player.isGhostMode) {
+                player.isGhostMode = true;
+                player.ghostModeEndTime = 5000;
+                player.invulnerableTime = 5000;
+            }
+        }
+    },
+
+    // 叠加与组合（2种）
+    {
+        id: 'element_fusion',
+        type: 'passive',
+        rarity: 'legendary',
+        emoji: '🔮',
+        name: '元素融合',
+        description: '火冰雷三元素融合攻击：每3发子弹依次附加火/冰/雷效果。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_element', 'element_fire', 'element_ice', 'element_lightning'],
+        apply: (player, game) => {
+            player.hasElementFusion = true;
+            player.elementCycle = 0;
+            player.elements = ['fire', 'ice', 'lightning'];
+        }
+    },
+    {
+        id: 'item_fusion',
+        type: 'active',
+        rarity: 'legendary',
+        emoji: '⚗️',
+        name: '道具融合',
+        description: '主动：融合两个被动道具为一个更强的道具（随机选择）。冷却60秒。',
+        unique: true,
+        shop: true,
+        tags: ['mechanic_fusion'],
+        cooldownMs: 60000,
+        onUse: (player, game) => {
+            if (!game || !player.passiveItems || player.passiveItems.length < 2) return;
+            
+            // 随机选择两个道具
+            let shuffled = [...player.passiveItems].sort(() => 0.5 - Math.random());
+            let item1Id = shuffled[0];
+            let item2Id = shuffled[1];
+            
+            // 移除这两个道具
+            player.passiveItems = player.passiveItems.filter(id => id !== item1Id && id !== item2Id);
+            
+            // 获取玩家已拥有的 unique 道具（用于避免重复）
+            let avoidUniqueIds = [];
+            if (player && Array.isArray(player.passiveItems)) {
+                avoidUniqueIds = player.passiveItems.filter((id) => {
+                    let d = getItemDef(id);
+                    return d && d.unique;
+                });
+            }
+            if (player && player.activeItem) {
+                let d = getItemDef(player.activeItem.id);
+                if (d && d.unique) avoidUniqueIds.push(player.activeItem.id);
+            }
+            
+            // 随机选择一个新道具（稀有度提升），避免玩家已拥有的 unique 道具
+            let rareItems = ITEM_DEFS.filter(d => 
+                (d.rarity === 'rare' || d.rarity === 'legendary') && 
+                !avoidUniqueIds.includes(d.id)
+            );
+            
+            // 如果没有可用的道具，则不限制 unique 属性
+            if (rareItems.length === 0) {
+                rareItems = ITEM_DEFS.filter(d => d.rarity === 'rare' || d.rarity === 'legendary');
+            }
+            
+            let newItem = rareItems[Math.floor(Math.random() * rareItems.length)];
+            
+            // 添加新道具
+            grantItemToPlayer(player, newItem.id, game);
+            
+            if (game && game.addExplosion) {
+                game.addExplosion(player.x, player.y, [255, 215, 0], 15);
+            }
+        }
     }
 ];
 
@@ -670,31 +934,43 @@ function playerHasItem(player, itemId) {
     return Array.isArray(player.passiveItems) && player.passiveItems.includes(itemId);
 }
 
-function equipActiveItem(player, itemDef, gameInstance, { dropPrevious = true } = {}) {
-    player.activeItem = player.activeItem || null;
+function equipActiveItem(player, itemDef, gameInstance, { dropPrevious = true, cooldownData = null } = {}) {
+    // 确保使用数组形式
+    player.activeItems = player.activeItems || [];
+    
+    // 获取最大装备数量（默认为1，双持天赋可增加）
+    let maxActiveItems = player.maxActiveItems || 1;
 
-    let old = player.activeItem;
-
-    player.activeItem = {
-        id: itemDef.id,
-        def: itemDef,
-        cooldownMs: itemDef.cooldownMs || 10000,
-        lastUsedTime: -Infinity
-    };
-
-    if (dropPrevious && old && gameInstance) {
-        let dropX = player.x + random(-20, 20);
-        let dropY = player.y + random(-20, 20);
-        gameInstance.powerUps.push(createItemPickup(dropX, dropY, old.id));
+    let old = null;
+    // 只有在达到最大装备数量时才移除旧道具
+    if (dropPrevious && player.activeItems.length >= maxActiveItems) {
+        // 移除第一个主动道具（如果存在）
+        old = player.activeItems.shift();
+        if (old && gameInstance) {
+            let dropX = player.x + random(-20, 20);
+            let dropY = player.y + random(-20, 20);
+            // 保留冷却时间信息
+            let oldCooldownData = {
+                lastUsedTime: old.lastUsedTime,
+                cooldownMs: old.cooldownMs
+            };
+            // 设置ownerId为player对象引用，用于拾取冷却检测
+            gameInstance.powerUps.push(createItemPickup(dropX, dropY, old.id, oldCooldownData, player));
+        }
     }
+
+    // 使用 addActiveItem 方法添加道具，传递冷却时间数据
+    player.addActiveItem(itemDef, cooldownData);
 }
 
-function grantItemToPlayer(player, itemId, gameInstance = null) {
+function grantItemToPlayer(player, itemId, gameInstance = null, pickupInstance = null) {
     let def = getItemDef(itemId);
     if (!def || !player) return false;
 
     if (def.type === 'active') {
-        equipActiveItem(player, def, gameInstance, { dropPrevious: true });
+        // 获取冷却时间数据（如果是从掉落物拾取的）
+        let cooldownData = pickupInstance && pickupInstance.cooldownData ? pickupInstance.cooldownData : null;
+        equipActiveItem(player, def, gameInstance, { dropPrevious: true, cooldownData: cooldownData });
         return true;
     }
 
@@ -804,7 +1080,7 @@ function rollShopItemDef(player, currentWave = 1) {
 
 // Collectible pickup entity
 class ItemPickup {
-    constructor(x, y, itemId) {
+    constructor(x, y, itemId, cooldownData = null, ownerId = null) {
         this.x = x;
         this.y = y;
         this.itemId = itemId;
@@ -818,14 +1094,31 @@ class ItemPickup {
 
         this.glowIntensity = 0;
         this.glowDirection = 1;
+
+        // 保存主动道具的冷却时间信息
+        this.cooldownData = cooldownData;
+
+        // 拾取冷却系统：防止刚刚丢弃的道具被立即拾取
+        this.ownerId = ownerId; // 标记是谁丢弃的道具
+        this.pickupCooldown = 2000; // 2秒拾取冷却时间
+        this.pickupCooldownEndTime = millis() + this.pickupCooldown;
     }
 
     update(player) {
         this.bobOffset += 0.05;
 
-        this.glowIntensity += this.glowDirection * 3;
-        if (this.glowIntensity > 110 || this.glowIntensity < 10) {
-            this.glowDirection *= -1;
+        // 检查是否在拾取冷却中
+        let isOnCooldown = this.ownerId !== null && millis() < this.pickupCooldownEndTime;
+
+        if (!isOnCooldown) {
+            // 正常状态下的发光效果
+            this.glowIntensity += this.glowDirection * 3;
+            if (this.glowIntensity > 110 || this.glowIntensity < 10) {
+                this.glowDirection *= -1;
+            }
+        } else {
+            // 冷却状态下减少发光
+            this.glowIntensity = 30;
         }
 
         let def = getItemDef(this.itemId);
@@ -836,6 +1129,10 @@ class ItemPickup {
 
         let distanceToPlayer = dist(this.x, this.y, player.x, player.y);
         if (distanceToPlayer < this.magnetRange) {
+            // 冷却中不吸引
+            if (isOnCooldown) {
+                return;
+            }
             let pullForce = map(distanceToPlayer, 0, this.magnetRange, 8, 0);
             let angle = atan2(player.y - this.y, player.x - this.x);
             this.x += cos(angle) * pullForce;
@@ -843,8 +1140,14 @@ class ItemPickup {
         }
 
         if (distanceToPlayer < this.size / 2 + player.size / 2) {
+            // 检查拾取冷却时间
+            if (this.ownerId !== null && millis() < this.pickupCooldownEndTime) {
+                // 还在冷却中，不能拾取
+                return;
+            }
+
             let g = safeGetGame();
-            grantItemToPlayer(player, this.itemId, g);
+            grantItemToPlayer(player, this.itemId, g, this);
             this.collected = true;
 
             if (typeof playSound === 'function') {
@@ -864,23 +1167,51 @@ class ItemPickup {
         let rarity = getRarityDef(def.rarity);
         let glowColor = color(rarity.color[0], rarity.color[1], rarity.color[2]);
 
+        // 检查是否在拾取冷却中
+        let isOnCooldown = this.ownerId !== null && millis() < this.pickupCooldownEndTime;
+
         push();
         translate(this.x, this.y + sin(this.bobOffset) * 3);
 
-        fill(red(glowColor), green(glowColor), blue(glowColor), this.glowIntensity);
-        noStroke();
-        ellipse(0, 0, this.size + 12, this.size + 12);
+        if (isOnCooldown) {
+            // 冷却中：显示灰色
+            fill(100, 100, 100, 80);
+            noStroke();
+            ellipse(0, 0, this.size + 12, this.size + 12);
 
-        fill(glowColor);
-        stroke(255);
-        strokeWeight(2);
-        ellipse(0, 0, this.size, this.size);
+            fill(80, 80, 80);
+            stroke(150, 150, 150);
+            strokeWeight(2);
+            ellipse(0, 0, this.size, this.size);
 
-        fill(255);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        textSize(this.size * 0.65);
-        text(def.emoji || '💎', 0, 0);
+            fill(200);
+            noStroke();
+            textAlign(CENTER, CENTER);
+            textSize(this.size * 0.65);
+            text(def.emoji || '💎', 0, 0);
+
+            // 显示冷却时间
+            let remainingTime = Math.ceil((this.pickupCooldownEndTime - millis()) / 1000);
+            fill(255);
+            textSize(10);
+            text(`${remainingTime}s`, 0, this.size / 2 + 12);
+        } else {
+            // 正常状态
+            fill(red(glowColor), green(glowColor), blue(glowColor), this.glowIntensity);
+            noStroke();
+            ellipse(0, 0, this.size + 12, this.size + 12);
+
+            fill(glowColor);
+            stroke(255);
+            strokeWeight(2);
+            ellipse(0, 0, this.size, this.size);
+
+            fill(255);
+            noStroke();
+            textAlign(CENTER, CENTER);
+            textSize(this.size * 0.65);
+            text(def.emoji || '💎', 0, 0);
+        }
 
         pop();
     }
@@ -890,8 +1221,8 @@ class ItemPickup {
     }
 }
 
-function createItemPickup(x, y, itemId) {
-    return new ItemPickup(x, y, itemId);
+function createItemPickup(x, y, itemId, cooldownData = null, ownerId = null) {
+    return new ItemPickup(x, y, itemId, cooldownData, ownerId);
 }
 
 function getBossPool(currentWave = 1) {

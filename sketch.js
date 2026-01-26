@@ -37,6 +37,13 @@ function keyPressed() {
     game.keyPressed(key);
 }
 
+function mouseWheel(event) {
+    if (game && game.mouseWheel) {
+        game.mouseWheel(event.delta);
+    }
+    return false; // Prevent default scroll behavior
+}
+
 // Prevent right-click context menu
 document.addEventListener('contextmenu', event => event.preventDefault());
 
